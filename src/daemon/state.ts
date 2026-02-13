@@ -4,6 +4,7 @@ import { WorkspaceManager } from "./workspace-manager";
 import { CapabilityStore } from "./capability-store";
 import { KnowledgeStore } from "./knowledge-store";
 import { ExternalLinkStore } from "../services/external-links";
+import { getKnowledgeDbPath } from "../paths";
 
 export interface Message {
   id?: string;
@@ -48,7 +49,7 @@ export class DaemonState {
   }
 
   initKnowledge(dbPath?: string): void {
-    const path = dbPath ?? `${process.env.CLAUDE_HUB_DIR ?? process.env.HOME + "/.claude-hub"}/knowledge.db`;
+    const path = dbPath ?? getKnowledgeDbPath();
     this.knowledgeStore = new KnowledgeStore(path);
   }
 

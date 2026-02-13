@@ -1,7 +1,9 @@
 import { atomicWrite, atomicRead } from "./file-store";
 import type { HandoffPayload } from "./handoff";
 
-const TEMPLATES_PATH = `${process.env.CLAUDE_HUB_DIR ?? process.env.HOME + "/.claude-hub"}/handoff-templates.json`;
+import { getHandoffTemplatesPath } from "../paths";
+
+const TEMPLATES_PATH = getHandoffTemplatesPath();
 
 export interface HandoffTemplate {
   id: string;

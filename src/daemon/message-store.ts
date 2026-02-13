@@ -1,13 +1,40 @@
-import { Database } from "bun:sqlite";
+import { BaseStore } from "./base-store";
+import { getMessagesDbPath } from "../paths";
 
-const DB_PATH = `${process.env.CLAUDE_HUB_DIR ?? process.env.HOME + "/.claude-hub"}/messages.db`;
+const DB_PATH = getMessagesDbPath();
 
-export class MessageStore {
-  private db: Database;
+interface MessageRow {
+  id: string;
+  from: string;
+  to: string;
+  type: string;
+  content: string;
+  timestamp: string;
+  read: number;
+  context: string | null;
+}
 
+interface CountRow {
+  count: number;
+}
+
+export interface Message {
+  id: string;
+  from: string;
+  to: string;
+  type: "message" | "handoff";
+  content: string;
+  timestamp: string;
+  read: boolean;
+  context?: Record<string, string>;
+}
+
+export class MessageStore extends BaseStore {
   constructor(dbPath?: string) {
-    this.db = new Database(dbPath ?? DB_PATH);
-    this.db.exec("PRAGMA journal_mode=WAL");
+    super(dbPath ?? DB_PATH);
+  }
+
+  protected createTables(): void {
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS messages (
         id TEXT PRIMARY KEY,
@@ -39,20 +66,20 @@ export class MessageStore {
     return id;
   }
 
-  getUnreadMessages(to: string): any[] {
-    return this.db
+  getUnreadMessages(to: string): Message[] {
+    const rows = this.db
       .query(`SELECT * FROM messages WHERE "to" = ? AND read = 0 ORDER BY timestamp ASC`)
-      .all(to)
-      .map(this.deserialize);
+      .all(to) as MessageRow[];
+    return rows.map(this.deserialize);
   }
 
-  getMessages(to: string, opts?: { limit?: number; offset?: number }): any[] {
+  getMessages(to: string, opts?: { limit?: number; offset?: number }): Message[] {
     const limit = opts?.limit ?? 50;
     const offset = opts?.offset ?? 0;
-    return this.db
+    const rows = this.db
       .query(`SELECT * FROM messages WHERE "to" = ? ORDER BY timestamp DESC LIMIT ? OFFSET ?`)
-      .all(to, limit, offset)
-      .map(this.deserialize);
+      .all(to, limit, offset) as MessageRow[];
+    return rows.map(this.deserialize);
   }
 
   markRead(to: string, id: string): void {
@@ -70,23 +97,25 @@ export class MessageStore {
   }
 
   countUnread(to: string): number {
-    return (this.db.query(`SELECT COUNT(*) as count FROM messages WHERE "to" = ? AND read = 0`).get(to) as any).count;
+    const row = this.db.query(`SELECT COUNT(*) as count FROM messages WHERE "to" = ? AND read = 0`).get(to) as CountRow;
+    return row.count;
   }
 
-  getHandoffs(to: string): any[] {
-    return this.db
+  getHandoffs(to: string): Message[] {
+    const rows = this.db
       .query(`SELECT * FROM messages WHERE "to" = ? AND type = 'handoff' ORDER BY timestamp DESC`)
-      .all(to)
-      .map(this.deserialize);
+      .all(to) as MessageRow[];
+    return rows.map(this.deserialize);
   }
 
-  close(): void {
-    this.db.close();
-  }
-
-  private deserialize(row: any): any {
+  private deserialize(row: MessageRow): Message {
     return {
-      ...row,
+      id: row.id,
+      from: row.from,
+      to: row.to,
+      type: row.type as "message" | "handoff",
+      content: row.content,
+      timestamp: row.timestamp,
       read: row.read === 1,
       context: row.context ? JSON.parse(row.context) : undefined,
     };

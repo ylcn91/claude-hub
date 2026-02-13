@@ -1,4 +1,4 @@
-import { createServer, type Server } from "net";
+import { createServer, type Server, type Socket } from "net";
 import { existsSync, unlinkSync, writeFileSync, readFileSync, mkdirSync } from "fs";
 import { timingSafeEqual } from "crypto";
 import { DaemonState } from "./state";
@@ -32,11 +32,11 @@ function getTokensDir(): string {
 
 const SAFE_ACCOUNT_NAME_RE = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,62}$/;
 
-export function verifyAccountToken(account: string, token: string): boolean {
+export async function verifyAccountToken(account: string, token: string): Promise<boolean> {
   if (!SAFE_ACCOUNT_NAME_RE.test(account)) return false;
   const tokenPath = `${getTokensDir()}/${account}.token`;
   try {
-    const stored = readFileSync(tokenPath, "utf-8").trim();
+    const stored = (await Bun.file(tokenPath).text()).trim();
     if (stored.length !== token.length) return false;
     return timingSafeEqual(Buffer.from(stored), Buffer.from(token));
   } catch {
@@ -47,6 +47,17 @@ export function verifyAccountToken(account: string, token: string): boolean {
 function reply(msg: any, response: object): string {
   return frameSend({ ...response, ...(msg.requestId ? { requestId: msg.requestId } : {}) });
 }
+
+function safeWrite(socket: Socket, data: string): void {
+  const ok = socket.write(data);
+  if (!ok) {
+    socket.once("drain", () => {});
+  }
+}
+
+const VALID_TASK_STATUSES = new Set<string>(["todo", "in_progress", "ready_for_review", "accepted", "rejected"]);
+const MAX_PAYLOAD_BYTES = 1_048_576; // 1 MB
+const IDLE_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
 
 export interface DaemonOpts {
   dbPath?: string;
@@ -109,26 +120,44 @@ export function startDaemon(opts?: DaemonOpts): { server: Server; state: DaemonS
   const server = createServer((socket) => {
     let authenticated = false;
     let accountName = "";
+    let authAttempts = 0;
+    let totalBytes = 0;
+
+    // Connection expiry: 30-minute idle timeout
+    let idleTimer = setTimeout(() => socket.end(), IDLE_TIMEOUT_MS);
+    const resetIdleTimer = () => {
+      clearTimeout(idleTimer);
+      idleTimer = setTimeout(() => socket.end(), IDLE_TIMEOUT_MS);
+    };
 
     const parser = createLineParser((msg) => {
+      resetIdleTimer();
+
       // Allow unauthenticated ping for health checks (reveals no data)
       if (msg.type === "ping") {
-        socket.write(reply(msg, { type: "pong" }));
+        safeWrite(socket, reply(msg, { type: "pong" }));
         return;
       }
 
       // All other messages require auth
       if (!authenticated) {
         if (msg.type === "auth" && msg.account && msg.token) {
-          if (verifyAccountToken(msg.account, msg.token)) {
-            authenticated = true;
-            accountName = msg.account;
-            state.connectAccount(accountName, msg.token);
-            socket.write(reply(msg, { type: "auth_ok" }));
-          } else {
-            socket.write(reply(msg, { type: "auth_fail", error: "Invalid token" }));
+          authAttempts++;
+          if (authAttempts > 5) {
             socket.end();
+            return;
           }
+          (async () => {
+            if (await verifyAccountToken(msg.account, msg.token)) {
+              authenticated = true;
+              accountName = msg.account;
+              state.connectAccount(accountName, msg.token);
+              safeWrite(socket, reply(msg, { type: "auth_ok" }));
+            } else {
+              safeWrite(socket, reply(msg, { type: "auth_fail", error: "Invalid token" }));
+              socket.end();
+            }
+          })();
         }
         return;
       }
@@ -136,6 +165,14 @@ export function startDaemon(opts?: DaemonOpts): { server: Server; state: DaemonS
       // Handler map — O(1) dispatch, guarantees only one handler runs per message
       const handlers: Record<string, (msg: any) => void> = {
         send_message: (msg) => {
+          if (typeof msg.to !== "string" || !msg.to) {
+            safeWrite(socket, reply(msg, { type: "error", error: "Invalid field: to" }));
+            return;
+          }
+          if (typeof msg.content !== "string" || !msg.content) {
+            safeWrite(socket, reply(msg, { type: "error", error: "Invalid field: content" }));
+            return;
+          }
           state.addMessage({
             from: accountName,
             to: msg.to,
@@ -144,15 +181,23 @@ export function startDaemon(opts?: DaemonOpts): { server: Server; state: DaemonS
             timestamp: new Date().toISOString(),
           });
           notifyMessage(accountName, msg.to, msg.content).catch(e => console.error("[notify]", e.message));
-          socket.write(reply(msg, { type: "result", delivered: state.isConnected(msg.to), queued: true }));
+          safeWrite(socket, reply(msg, { type: "result", delivered: state.isConnected(msg.to), queued: true }));
         },
 
         count_unread: (msg) => {
           const count = state.countUnread(accountName);
-          socket.write(reply(msg, { type: "result", count }));
+          safeWrite(socket, reply(msg, { type: "result", count }));
         },
 
         read_messages: (msg) => {
+          if (msg.limit !== undefined && (!Number.isInteger(msg.limit) || msg.limit < 0)) {
+            safeWrite(socket, reply(msg, { type: "error", error: "Invalid field: limit" }));
+            return;
+          }
+          if (msg.offset !== undefined && (!Number.isInteger(msg.offset) || msg.offset < 0)) {
+            safeWrite(socket, reply(msg, { type: "error", error: "Invalid field: offset" }));
+            return;
+          }
           const limit = msg.limit as number | undefined;
           const offset = msg.offset as number | undefined;
           const messages = (limit || offset)
@@ -161,7 +206,7 @@ export function startDaemon(opts?: DaemonOpts): { server: Server; state: DaemonS
           if (!limit && !offset) {
             state.markAllRead(accountName);
           }
-          socket.write(reply(msg, { type: "result", messages }));
+          safeWrite(socket, reply(msg, { type: "result", messages }));
         },
 
         list_accounts: async (msg) => {
@@ -177,16 +222,20 @@ export function startDaemon(opts?: DaemonOpts): { server: Server; state: DaemonS
                 accounts.push({ name, status: "active" as const });
               }
             }
-            socket.write(reply(msg, { type: "result", accounts }));
+            safeWrite(socket, reply(msg, { type: "result", accounts }));
           } catch (err: any) {
-            socket.write(reply(msg, { type: "error", error: err.message }));
+            safeWrite(socket, reply(msg, { type: "error", error: err.message }));
           }
         },
 
         handoff_task: (msg) => {
+          if (typeof msg.to !== "string" || !msg.to) {
+            safeWrite(socket, reply(msg, { type: "error", error: "Invalid field: to" }));
+            return;
+          }
           const validation = validateHandoff(msg.payload);
           if (!validation.valid) {
-            socket.write(reply(msg, {
+            safeWrite(socket, reply(msg, {
               type: "error",
               error: "Invalid handoff payload",
               details: validation.errors,
@@ -204,7 +253,7 @@ export function startDaemon(opts?: DaemonOpts): { server: Server; state: DaemonS
           };
           const handoffId = state.addMessage(handoffMsg);
           notifyHandoff(accountName, msg.to, validation.payload.goal).catch(e => console.error("[notify]", e.message));
-          socket.write(reply(msg, {
+          safeWrite(socket, reply(msg, {
             type: "result",
             delivered: state.isConnected(msg.to),
             queued: true,
@@ -214,12 +263,20 @@ export function startDaemon(opts?: DaemonOpts): { server: Server; state: DaemonS
 
         update_task_status: async (msg) => {
           try {
+            if (typeof msg.taskId !== "string" || !msg.taskId) {
+              safeWrite(socket, reply(msg, { type: "error", error: "Invalid field: taskId" }));
+              return;
+            }
+            if (!VALID_TASK_STATUSES.has(msg.status)) {
+              safeWrite(socket, reply(msg, { type: "error", error: "Invalid field: status" }));
+              return;
+            }
             let board = await loadTasks();
             const status = msg.status as TaskStatus;
 
             if (status === "rejected") {
               if (!msg.reason) {
-                socket.write(reply(msg, { type: "error", error: "Reason is required when rejecting" }));
+                safeWrite(socket, reply(msg, { type: "error", error: "Reason is required when rejecting" }));
                 return;
               }
               board = rejectTask(board, msg.taskId, msg.reason);
@@ -266,7 +323,7 @@ export function startDaemon(opts?: DaemonOpts): { server: Server; state: DaemonS
 
             // Auto-acceptance: if transitioning to ready_for_review and feature enabled
             if (status === "ready_for_review" && features?.autoAcceptance && task) {
-              socket.write(reply(msg, { type: "result", task, acceptance: "running" }));
+              safeWrite(socket, reply(msg, { type: "result", task, acceptance: "running" }));
               (async () => {
                 try {
                   const handoffs = state.getHandoffs(accountName);
@@ -275,7 +332,12 @@ export function startDaemon(opts?: DaemonOpts): { server: Server; state: DaemonS
                     return ctx.branch === msg.branch || ctx.projectDir === msg.workspacePath;
                   });
                   if (!handoff) return;
-                  const payload = JSON.parse(handoff.content);
+                  let payload: any;
+                  try {
+                    payload = JSON.parse(handoff.content);
+                  } catch {
+                    return;
+                  }
                   const cmds: string[] = payload.run_commands ?? [];
                   if (cmds.length === 0) return;
                   const workDir = task.workspaceContext?.workspacePath ?? msg.workspacePath;
@@ -292,21 +354,25 @@ export function startDaemon(opts?: DaemonOpts): { server: Server; state: DaemonS
                 } catch (e: any) { console.error("[accept]", e.message); }
               })();
             } else {
-              socket.write(reply(msg, { type: "result", task }));
+              safeWrite(socket, reply(msg, { type: "result", task }));
             }
           } catch (err: any) {
-            socket.write(reply(msg, { type: "error", error: err.message }));
+            safeWrite(socket, reply(msg, { type: "error", error: err.message }));
           }
         },
 
         archive_messages: (msg) => {
+          if (!Number.isInteger(msg.days) || msg.days < 1) {
+            safeWrite(socket, reply(msg, { type: "error", error: "Invalid field: days" }));
+            return;
+          }
           const archived = state.archiveOld(msg.days);
-          socket.write(reply(msg, { type: "result", archived }));
+          safeWrite(socket, reply(msg, { type: "result", archived }));
         },
 
         prepare_worktree_for_handoff: async (msg) => {
           if (!state.workspaceManager) {
-            socket.write(reply(msg, { type: "error", error: "Workspace feature not enabled" }));
+            safeWrite(socket, reply(msg, { type: "error", error: "Workspace feature not enabled" }));
             return;
           }
           try {
@@ -316,37 +382,37 @@ export function startDaemon(opts?: DaemonOpts): { server: Server; state: DaemonS
               ownerAccount: accountName,
               handoffId: msg.handoffId,
             });
-            socket.write(reply(msg, { type: "result", ...result }));
+            safeWrite(socket, reply(msg, { type: "result", ...result }));
           } catch (err: any) {
-            socket.write(reply(msg, { type: "error", error: err.message }));
+            safeWrite(socket, reply(msg, { type: "error", error: err.message }));
           }
         },
 
         get_workspace_status: async (msg) => {
           if (!state.workspaceManager) {
-            socket.write(reply(msg, { type: "error", error: "Workspace feature not enabled" }));
+            safeWrite(socket, reply(msg, { type: "error", error: "Workspace feature not enabled" }));
             return;
           }
           try {
             const ws = msg.id
               ? await state.workspaceManager.getWorkspace(msg.id)
               : await state.workspaceManager.getWorkspaceByKey(msg.repoPath, msg.branch);
-            socket.write(reply(msg, { type: "result", workspace: ws }));
+            safeWrite(socket, reply(msg, { type: "result", workspace: ws }));
           } catch (err: any) {
-            socket.write(reply(msg, { type: "error", error: err.message }));
+            safeWrite(socket, reply(msg, { type: "error", error: err.message }));
           }
         },
 
         cleanup_workspace: async (msg) => {
           if (!state.workspaceManager) {
-            socket.write(reply(msg, { type: "error", error: "Workspace feature not enabled" }));
+            safeWrite(socket, reply(msg, { type: "error", error: "Workspace feature not enabled" }));
             return;
           }
           try {
             const result = await state.workspaceManager.cleanupWorkspace(msg.id);
-            socket.write(reply(msg, { type: "result", ...result }));
+            safeWrite(socket, reply(msg, { type: "result", ...result }));
           } catch (err: any) {
-            socket.write(reply(msg, { type: "error", error: err.message }));
+            safeWrite(socket, reply(msg, { type: "error", error: err.message }));
           }
         },
 
@@ -355,10 +421,16 @@ export function startDaemon(opts?: DaemonOpts): { server: Server; state: DaemonS
             const handoffs = state.getHandoffs(accountName);
             const handoff = handoffs.find((h: any) => h.id === msg.handoffId);
             if (!handoff) {
-              socket.write(reply(msg, { type: "error", error: "Handoff not found" }));
+              safeWrite(socket, reply(msg, { type: "error", error: "Handoff not found" }));
               return;
             }
-            const payload = JSON.parse(handoff.content);
+            let payload: any;
+            try {
+              payload = JSON.parse(handoff.content);
+            } catch {
+              safeWrite(socket, reply(msg, { type: "error", error: "Corrupted handoff data" }));
+              return;
+            }
             const context = handoff.context ?? {};
             let workspace = null;
 
@@ -374,19 +446,19 @@ export function startDaemon(opts?: DaemonOpts): { server: Server; state: DaemonS
               } catch (e: any) { console.error("[workspace]", e.message); }
             }
 
-            socket.write(reply(msg, {
+            safeWrite(socket, reply(msg, {
               type: "result",
               handoff: { id: handoff.id, payload, context },
               workspace,
             }));
           } catch (err: any) {
-            socket.write(reply(msg, { type: "error", error: err.message }));
+            safeWrite(socket, reply(msg, { type: "error", error: err.message }));
           }
         },
 
         suggest_assignee: async (msg) => {
           if (!state.capabilityStore) {
-            socket.write(reply(msg, { type: "error", error: "Capability routing not enabled" }));
+            safeWrite(socket, reply(msg, { type: "error", error: "Capability routing not enabled" }));
             return;
           }
           try {
@@ -408,33 +480,33 @@ export function startDaemon(opts?: DaemonOpts): { server: Server; state: DaemonS
               priority: msg.priority,
               workload,
             });
-            socket.write(reply(msg, { type: "result", scores }));
+            safeWrite(socket, reply(msg, { type: "result", scores }));
           } catch (err: any) {
-            socket.write(reply(msg, { type: "error", error: err.message }));
+            safeWrite(socket, reply(msg, { type: "error", error: err.message }));
           }
         },
 
         ping: (msg) => {
-          socket.write(reply(msg, { type: "pong" }));
+          safeWrite(socket, reply(msg, { type: "pong" }));
         },
 
         health_check: (msg) => {
           const status = getHealthStatus(state, state.startedAt);
-          socket.write(reply(msg, { type: "result", ...status }));
+          safeWrite(socket, reply(msg, { type: "result", ...status }));
         },
 
         search_knowledge: (msg) => {
           if (!state.knowledgeStore) {
-            socket.write(reply(msg, { type: "error", error: "Knowledge index not enabled" }));
+            safeWrite(socket, reply(msg, { type: "error", error: "Knowledge index not enabled" }));
             return;
           }
           const results = state.knowledgeStore.search(msg.query, msg.category, msg.limit);
-          socket.write(reply(msg, { type: "result", results }));
+          safeWrite(socket, reply(msg, { type: "result", results }));
         },
 
         index_note: (msg) => {
           if (!state.knowledgeStore) {
-            socket.write(reply(msg, { type: "error", error: "Knowledge index not enabled" }));
+            safeWrite(socket, reply(msg, { type: "error", error: "Knowledge index not enabled" }));
             return;
           }
           const entry = state.knowledgeStore.index({
@@ -444,12 +516,16 @@ export function startDaemon(opts?: DaemonOpts): { server: Server; state: DaemonS
             tags: msg.tags ?? [],
             accountName: accountName,
           });
-          socket.write(reply(msg, { type: "result", entry }));
+          safeWrite(socket, reply(msg, { type: "result", entry }));
         },
 
         link_task: (msg) => {
           if (!state.externalLinkStore) {
-            socket.write(reply(msg, { type: "error", error: "GitHub integration not enabled" }));
+            safeWrite(socket, reply(msg, { type: "error", error: "GitHub integration not enabled" }));
+            return;
+          }
+          if (typeof msg.taskId !== "string" || !msg.taskId) {
+            safeWrite(socket, reply(msg, { type: "error", error: "Invalid field: taskId" }));
             return;
           }
           try {
@@ -460,36 +536,48 @@ export function startDaemon(opts?: DaemonOpts): { server: Server; state: DaemonS
               externalId: msg.externalId,
               taskId: msg.taskId,
             });
-            socket.write(reply(msg, { type: "result", link }));
+            safeWrite(socket, reply(msg, { type: "result", link }));
           } catch (err: any) {
-            socket.write(reply(msg, { type: "error", error: err.message }));
+            safeWrite(socket, reply(msg, { type: "error", error: err.message }));
           }
         },
 
         get_task_links: (msg) => {
           if (!state.externalLinkStore) {
-            socket.write(reply(msg, { type: "error", error: "GitHub integration not enabled" }));
+            safeWrite(socket, reply(msg, { type: "error", error: "GitHub integration not enabled" }));
+            return;
+          }
+          if (typeof msg.taskId !== "string" || !msg.taskId) {
+            safeWrite(socket, reply(msg, { type: "error", error: "Invalid field: taskId" }));
             return;
           }
           try {
             const links = state.externalLinkStore.getLinksForTask(msg.taskId);
-            socket.write(reply(msg, { type: "result", links }));
+            safeWrite(socket, reply(msg, { type: "result", links }));
           } catch (err: any) {
-            socket.write(reply(msg, { type: "error", error: err.message }));
+            safeWrite(socket, reply(msg, { type: "error", error: err.message }));
           }
         },
 
         get_review_bundle: async (msg) => {
+          if (typeof msg.taskId !== "string" || !msg.taskId) {
+            safeWrite(socket, reply(msg, { type: "error", error: "Invalid field: taskId" }));
+            return;
+          }
           try {
             const { getBundle } = await import("../services/review-bundle-store");
             const bundle = await getBundle(msg.taskId);
-            socket.write(reply(msg, { type: "result", bundle }));
+            safeWrite(socket, reply(msg, { type: "result", bundle }));
           } catch (err: any) {
-            socket.write(reply(msg, { type: "error", error: err.message }));
+            safeWrite(socket, reply(msg, { type: "error", error: err.message }));
           }
         },
 
         generate_review_bundle: async (msg) => {
+          if (typeof msg.taskId !== "string" || !msg.taskId) {
+            safeWrite(socket, reply(msg, { type: "error", error: "Invalid field: taskId" }));
+            return;
+          }
           try {
             const { generateReviewBundle } = await import("../services/review-bundle");
             const { saveBundle } = await import("../services/review-bundle-store");
@@ -501,9 +589,9 @@ export function startDaemon(opts?: DaemonOpts): { server: Server; state: DaemonS
               runCommands: msg.runCommands,
             });
             await saveBundle(bundle);
-            socket.write(reply(msg, { type: "result", bundle }));
+            safeWrite(socket, reply(msg, { type: "result", bundle }));
           } catch (err: any) {
-            socket.write(reply(msg, { type: "error", error: err.message }));
+            safeWrite(socket, reply(msg, { type: "error", error: err.message }));
           }
         },
 
@@ -515,9 +603,9 @@ export function startDaemon(opts?: DaemonOpts): { server: Server; state: DaemonS
               fromDate: msg.fromDate,
               toDate: msg.toDate,
             });
-            socket.write(reply(msg, { type: "result", ...snapshot }));
+            safeWrite(socket, reply(msg, { type: "result", ...snapshot }));
           } catch (err: any) {
-            socket.write(reply(msg, { type: "error", error: err.message }));
+            safeWrite(socket, reply(msg, { type: "error", error: err.message }));
           }
         },
       };
@@ -526,9 +614,17 @@ export function startDaemon(opts?: DaemonOpts): { server: Server; state: DaemonS
       if (handler) handler(msg);
     });
 
-    socket.on("data", (data) => parser.feed(data));
+    socket.on("data", (data) => {
+      totalBytes += data.length;
+      if (totalBytes > MAX_PAYLOAD_BYTES) {
+        socket.destroy();
+        return;
+      }
+      parser.feed(data);
+    });
 
     socket.on("close", () => {
+      clearTimeout(idleTimer);
       if (accountName) state.disconnectAccount(accountName);
     });
   });

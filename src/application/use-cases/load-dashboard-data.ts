@@ -3,6 +3,7 @@ import { registry } from "../../providers/index.js";
 import { getEntireCheckpoints } from "../../services/entire.js";
 import { fetchUnreadCounts } from "../../services/daemon-client.js";
 import { notifyRateLimit } from "../../services/notifications.js";
+import { assertHomeDir } from "../../paths.js";
 import type { AccountConfig } from "../../types.js";
 import type { AgentStats, QuotaEstimate } from "../../providers/types.js";
 
@@ -34,7 +35,7 @@ export async function loadDashboardData(configPath?: string): Promise<DashboardD
 
   for (const account of config.accounts) {
     const provider = registry.getOrDefault(account.provider);
-    const configDir = account.configDir.replace("~", process.env.HOME!);
+    const configDir = account.configDir.replace("~", assertHomeDir());
     const statsPath = `${configDir}/stats-cache.json`;
     const stats = await provider.parseStatsFromFile(statsPath);
     const quotaPolicy = {

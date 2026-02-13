@@ -1,12 +1,11 @@
 import { join } from "node:path";
 import { mkdirSync, readdirSync, unlinkSync } from "node:fs";
 import { atomicRead, atomicWrite } from "./file-store";
-import { HUB_DIR } from "../types";
+import { getReviewBundlesDir } from "../paths";
 import type { ReviewBundle } from "./review-bundle";
 
 function getBundlesDir(): string {
-  const base = process.env.CLAUDE_HUB_DIR ?? HUB_DIR;
-  return join(base, "review-bundles");
+  return getReviewBundlesDir();
 }
 
 export async function saveBundle(bundle: ReviewBundle): Promise<void> {

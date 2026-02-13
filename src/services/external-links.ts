@@ -1,6 +1,7 @@
 import { Database } from "bun:sqlite";
-import { join } from "node:path";
 import { mkdirSync } from "node:fs";
+import { dirname } from "node:path";
+import { getExternalLinksDbPath } from "../paths";
 
 export interface ExternalLink {
   id: string;
@@ -13,9 +14,9 @@ export interface ExternalLink {
 }
 
 function getDefaultDbPath(): string {
-  const hubDir = process.env.CLAUDE_HUB_DIR ?? `${process.env.HOME}/.claude-hub`;
-  mkdirSync(hubDir, { recursive: true });
-  return join(hubDir, "external-links.db");
+  const dbPath = getExternalLinksDbPath();
+  mkdirSync(dirname(dbPath), { recursive: true });
+  return dbPath;
 }
 
 export class ExternalLinkStore {
@@ -51,14 +52,14 @@ export class ExternalLinkStore {
   getLinksForTask(taskId: string): ExternalLink[] {
     const rows = this.db.query(
       `SELECT * FROM external_links WHERE task_id = ? ORDER BY created_at`,
-    ).all(taskId) as any[];
+    ).all(taskId) as ExternalLinkRow[];
     return rows.map(rowToLink);
   }
 
   getAllLinks(): ExternalLink[] {
     const rows = this.db.query(
       `SELECT * FROM external_links ORDER BY created_at`,
-    ).all() as any[];
+    ).all() as ExternalLinkRow[];
     return rows.map(rowToLink);
   }
 
@@ -72,7 +73,17 @@ export class ExternalLinkStore {
   }
 }
 
-function rowToLink(row: any): ExternalLink {
+interface ExternalLinkRow {
+  id: string;
+  provider: "github";
+  type: "issue" | "pr";
+  url: string;
+  external_id: string;
+  task_id: string;
+  created_at: string;
+}
+
+function rowToLink(row: ExternalLinkRow): ExternalLink {
   return {
     id: row.id,
     provider: row.provider,

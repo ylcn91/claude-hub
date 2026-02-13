@@ -1,6 +1,8 @@
 import { atomicWrite, atomicRead } from "./file-store";
 
-const PROMPTS_PATH = `${process.env.CLAUDE_HUB_DIR ?? process.env.HOME + "/.claude-hub"}/prompts.json`;
+import { getPromptsPath } from "../paths";
+
+const PROMPTS_PATH = getPromptsPath();
 
 export interface SavedPrompt {
   id: string;

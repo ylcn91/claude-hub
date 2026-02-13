@@ -78,7 +78,8 @@ if (command === "daemon" && subcommand === "start") {
   stopDaemonByPid();
 } else if (command === "daemon" && subcommand === "supervise") {
   const { startSupervisor } = await import("./daemon/supervisor.js");
-  const DAEMON_SOCK = `${process.env.CLAUDE_HUB_DIR ?? process.env.HOME + "/.claude-hub"}/hub.sock`;
+  const { getSockPath } = await import("./paths.js");
+  const DAEMON_SOCK = getSockPath();
   const daemonScript = new URL("./daemon/index.ts", import.meta.url).pathname;
   const supervisor = startSupervisor({ sockPath: DAEMON_SOCK, daemonScript });
   console.log("Claude Hub daemon supervisor started");

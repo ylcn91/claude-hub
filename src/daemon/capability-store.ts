@@ -1,14 +1,25 @@
-import { Database } from "bun:sqlite";
+import { BaseStore } from "./base-store";
 import type { AccountCapability } from "../services/account-capabilities";
+import { getCapabilitiesDbPath } from "../paths";
 
-const DB_PATH = `${process.env.CLAUDE_HUB_DIR ?? process.env.HOME + "/.claude-hub"}/capabilities.db`;
+const DB_PATH = getCapabilitiesDbPath();
 
-export class CapabilityStore {
-  private db: Database;
+interface CapabilityRow {
+  account_name: string;
+  skills: string;
+  total_tasks: number;
+  accepted_tasks: number;
+  rejected_tasks: number;
+  avg_delivery_ms: number;
+  last_active_at: string;
+}
 
+export class CapabilityStore extends BaseStore {
   constructor(dbPath?: string) {
-    this.db = new Database(dbPath ?? DB_PATH);
-    this.db.exec("PRAGMA journal_mode=WAL");
+    super(dbPath ?? DB_PATH);
+  }
+
+  protected createTables(): void {
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS account_capabilities (
         account_name TEXT PRIMARY KEY,
@@ -40,7 +51,7 @@ export class CapabilityStore {
   get(accountName: string): AccountCapability | null {
     const row = this.db
       .query(`SELECT * FROM account_capabilities WHERE account_name = ?`)
-      .get(accountName) as any;
+      .get(accountName) as CapabilityRow | null;
     if (!row) return null;
     return this.deserialize(row);
   }
@@ -48,7 +59,7 @@ export class CapabilityStore {
   getAll(): AccountCapability[] {
     const rows = this.db
       .query(`SELECT * FROM account_capabilities ORDER BY account_name`)
-      .all() as any[];
+      .all() as CapabilityRow[];
     return rows.map(this.deserialize);
   }
 
@@ -93,11 +104,7 @@ export class CapabilityStore {
     );
   }
 
-  close(): void {
-    this.db.close();
-  }
-
-  private deserialize(row: any): AccountCapability {
+  private deserialize(row: CapabilityRow): AccountCapability {
     return {
       accountName: row.account_name,
       skills: JSON.parse(row.skills),

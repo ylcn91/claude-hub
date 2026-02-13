@@ -1,5 +1,6 @@
 import { loadConfig } from "../../config.js";
 import { registry } from "../../providers/index.js";
+import { assertHomeDir } from "../../paths.js";
 import type { AccountConfig } from "../../types.js";
 import type { AgentStats } from "../../providers/types.js";
 
@@ -15,7 +16,7 @@ export async function loadUsageData(configPath?: string): Promise<AccountUsageDa
 
   for (const account of config.accounts) {
     const provider = registry.getOrDefault(account.provider);
-    const configDir = account.configDir.replace("~", process.env.HOME!);
+    const configDir = account.configDir.replace("~", assertHomeDir());
     const statsPath = `${configDir}/stats-cache.json`;
     const stats = await provider.parseStatsFromFile(statsPath);
     const weeklyTotal = stats.weeklyActivity.reduce(

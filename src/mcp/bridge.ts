@@ -5,18 +5,30 @@ import { readFileSync, existsSync } from "fs";
 import { spawn } from "child_process";
 import { registerTools, type DaemonSender } from "./tools";
 import { createLineParser, generateRequestId, frameSend } from "../daemon/framing";
+import { getSockPath, getPidPath, getTokensDir } from "../paths";
 
-const HUB_DIR = process.env.CLAUDE_HUB_DIR ?? `${process.env.HOME}/.claude-hub`;
-const DAEMON_SOCK_PATH = `${HUB_DIR}/hub.sock`;
-const DAEMON_PID_PATH = `${HUB_DIR}/daemon.pid`;
-const TOKENS_DIR = `${HUB_DIR}/tokens`;
+const DAEMON_SOCK_PATH = getSockPath();
+const DAEMON_PID_PATH = getPidPath();
+const TOKENS_DIR = getTokensDir();
+
+const MCP_REQUEST_TIMEOUT_MS = 5_000;
+const DAEMON_START_TIMEOUT_MS = 3_000;
+const DAEMON_START_POLL_MS = 100;
+const MAX_RECONNECT_ATTEMPTS = 5;
+const RECONNECT_MAX_DELAY_MS = 30_000;
 
 function getToken(account: string): string {
   return readFileSync(`${TOKENS_DIR}/${account}.token`, "utf-8").trim();
 }
 
+interface PendingRequest {
+  resolve: (value: Record<string, unknown>) => void;
+  reject: (reason: Error) => void;
+  timer: ReturnType<typeof setTimeout>;
+}
+
 function createDaemonSender(socket: Socket): DaemonSender {
-  const pending = new Map<string, { resolve: Function; reject: Function; timer: ReturnType<typeof setTimeout> }>();
+  const pending = new Map<string, PendingRequest>();
 
   const parser = createLineParser((msg) => {
     if (msg.requestId && pending.has(msg.requestId)) {
@@ -34,8 +46,8 @@ function createDaemonSender(socket: Socket): DaemonSender {
       const requestId = generateRequestId();
       const timer = setTimeout(() => {
         pending.delete(requestId);
-        reject(new Error("Request timed out (5s)"));
-      }, 5000);
+        reject(new Error(`Request timed out (${MCP_REQUEST_TIMEOUT_MS}ms)`));
+      }, MCP_REQUEST_TIMEOUT_MS);
       pending.set(requestId, { resolve, reject, timer });
       socket.write(frameSend({ ...msg, requestId }));
     });
@@ -65,14 +77,14 @@ export async function ensureDaemonRunning(): Promise<void> {
   });
   child.unref();
 
-  // Wait up to 3 seconds for hub.sock to appear
-  const deadline = Date.now() + 3000;
+  // Wait for hub.sock to appear
+  const deadline = Date.now() + DAEMON_START_TIMEOUT_MS;
   while (Date.now() < deadline) {
     if (existsSync(DAEMON_SOCK_PATH)) return;
-    await new Promise((r) => setTimeout(r, 100));
+    await new Promise((r) => setTimeout(r, DAEMON_START_POLL_MS));
   }
 
-  throw new Error("Daemon failed to start within 3 seconds");
+  throw new Error(`Daemon failed to start within ${DAEMON_START_TIMEOUT_MS}ms`);
 }
 
 export async function startBridge(account: string): Promise<void> {
@@ -103,16 +115,15 @@ export async function startBridge(account: string): Promise<void> {
 
   // Reconnection logic for daemon socket
   let reconnectAttempts = 0;
-  const MAX_RECONNECT = 5;
 
   daemonSocket.on("close", () => {
-    if (reconnectAttempts >= MAX_RECONNECT) {
+    if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
       console.error("[bridge] Max reconnection attempts reached");
       return;
     }
-    const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), 30000);
+    const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), RECONNECT_MAX_DELAY_MS);
     reconnectAttempts++;
-    console.error(`[bridge] Connection lost, reconnecting in ${delay}ms (attempt ${reconnectAttempts}/${MAX_RECONNECT})`);
+    console.error(`[bridge] Connection lost, reconnecting in ${delay}ms (attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})`);
     setTimeout(async () => {
       try {
         await ensureDaemonRunning();
@@ -127,12 +138,14 @@ export async function startBridge(account: string): Promise<void> {
               reconnectAttempts = 0;
               console.error("[bridge] Reconnected successfully");
             }
-          } catch (err: any) {
-            console.error("[bridge] Re-auth failed:", err.message);
+          } catch (err) {
+            const message = err instanceof Error ? err.message : String(err);
+            console.error("[bridge] Re-auth failed:", message);
           }
         });
-      } catch (err: any) {
-        console.error("[bridge] Reconnection failed:", err.message);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        console.error("[bridge] Reconnection failed:", message);
       }
     }, delay);
   });

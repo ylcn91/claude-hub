@@ -52,8 +52,8 @@ export async function sendNotification(
 // Load notification config from hub config
 export async function loadNotificationConfig(): Promise<NotificationConfig> {
   try {
-    const hubDir = process.env.CLAUDE_HUB_DIR ?? `${process.env.HOME}/.claude-hub`;
-    const config = await atomicRead<any>(`${hubDir}/config.json`);
+    const { getConfigPath } = await import("../paths.js");
+    const config = await atomicRead<any>(getConfigPath());
     if (config?.notifications) {
       return { ...DEFAULT_NOTIFICATION_CONFIG, ...config.notifications };
     }

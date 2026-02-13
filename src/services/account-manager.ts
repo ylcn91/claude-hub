@@ -3,7 +3,7 @@ import { existsSync } from "fs";
 import { join, dirname } from "path";
 import { randomBytes } from "crypto";
 import { loadConfig, saveConfig, addAccount, removeAccount } from "../config";
-import { TOKENS_DIR } from "../types";
+import { getTokensDir as getTokensDirFromPaths, assertHomeDir } from "../paths";
 import type { AccountConfig, ProviderId } from "../types";
 
 export const CATPPUCCIN_COLORS = [
@@ -35,9 +35,7 @@ export interface SetupAccountOptions {
 }
 
 function getTokensDir(): string {
-  return process.env.CLAUDE_HUB_DIR
-    ? `${process.env.CLAUDE_HUB_DIR}/tokens`
-    : TOKENS_DIR;
+  return getTokensDirFromPaths();
 }
 
 const ACCOUNT_NAME_RE = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,62}$/;
@@ -65,7 +63,7 @@ export async function setupAccount(opts: SetupAccountOptions): Promise<{
     throw new Error(`Account '${opts.name}' already exists`);
   }
 
-  const expandedDir = opts.configDir.replace(/^~/, process.env.HOME ?? "");
+  const expandedDir = opts.configDir.replace(/^~/, assertHomeDir());
 
   // 1. Create config directory
   await mkdir(expandedDir, { recursive: true });
@@ -78,7 +76,7 @@ export async function setupAccount(opts: SetupAccountOptions): Promise<{
   await writeFile(tokenPath, token, { mode: 0o600 });
 
   // 3. Symlink plugins/skills/commands from ~/.claude
-  const defaultClaudeDir = `${process.env.HOME}/.claude`;
+  const defaultClaudeDir = `${assertHomeDir()}/.claude`;
   const symlinks: Array<[string, string]> = [];
 
   if (opts.symlinkPlugins !== false) symlinks.push(["plugins", "plugins"]);
@@ -151,7 +149,7 @@ export async function rotateToken(
   await writeFile(tokenPath, newToken, { mode: 0o600 });
 
   // Update settings.json MCP config in account's config dir
-  const expandedDir = account.configDir.replace(/^~/, process.env.HOME ?? "");
+  const expandedDir = account.configDir.replace(/^~/, assertHomeDir());
   await setupMCPConfig(expandedDir, name);
 
   return { newToken, tokenPath };
@@ -177,7 +175,7 @@ export async function teardownAccount(
 
   // Purge: remove the config directory
   if (opts?.purge) {
-    const expandedDir = account.configDir.replace(/^~/, process.env.HOME ?? "");
+    const expandedDir = account.configDir.replace(/^~/, assertHomeDir());
     if (existsSync(expandedDir)) {
       const { rm } = await import("node:fs/promises");
       await rm(expandedDir, { recursive: true, force: true });
@@ -193,7 +191,7 @@ export async function addShellAlias(
   name: string,
   configDir: string
 ): Promise<{ modified: boolean; backupPath: string | null }> {
-  const zshrcPath = `${process.env.HOME}/.zshrc`;
+  const zshrcPath = `${assertHomeDir()}/.zshrc`;
   const aliasLine = `alias claude-${name}='CLAUDE_CONFIG_DIR="${configDir}" claude'`;
   const marker = `# claude-hub:${name}`;
 

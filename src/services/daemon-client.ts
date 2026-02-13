@@ -2,13 +2,8 @@ import { connect } from "net";
 import { readFileSync, existsSync } from "fs";
 import { createLineParser, generateRequestId, frameSend } from "../daemon/framing";
 
-function getHubDir(): string {
-  return process.env.CLAUDE_HUB_DIR ?? `${process.env.HOME}/.claude-hub`;
-}
+import { getHubDir, getSockPath } from "../paths";
 
-function getSockPath(): string {
-  return `${getHubDir()}/hub.sock`;
-}
 
 function getToken(account: string): string | null {
   try {

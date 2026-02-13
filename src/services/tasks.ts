@@ -46,9 +46,10 @@ export interface TaskBoard {
 
 const EMPTY_BOARD: TaskBoard = { tasks: [] };
 
+import { getTasksPath as getTasksPathFromPaths } from "../paths";
+
 function getTasksPath(): string {
-  const hubDir = process.env.CLAUDE_HUB_DIR ?? `${process.env.HOME}/.claude-hub`;
-  return `${hubDir}/tasks.json`;
+  return getTasksPathFromPaths();
 }
 
 export async function loadTasks(path?: string): Promise<TaskBoard> {

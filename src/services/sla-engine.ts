@@ -8,10 +8,10 @@ export interface SLAConfig {
 }
 
 export const DEFAULT_SLA_CONFIG: SLAConfig = {
-  inProgressMaxMs: 30 * 60 * 1000,
-  blockedMaxMs: 15 * 60 * 1000,
-  reviewMaxMs: 10 * 60 * 1000,
-  checkIntervalMs: 60 * 1000,
+  inProgressMaxMs: 30 * 60 * 1000,  // 30 minutes before ping
+  blockedMaxMs: 15 * 60 * 1000,     // 15 minutes before escalation
+  reviewMaxMs: 10 * 60 * 1000,      // 10 minutes before review nudge
+  checkIntervalMs: 60 * 1000,       // 1 minute check interval
 };
 
 export interface Escalation {

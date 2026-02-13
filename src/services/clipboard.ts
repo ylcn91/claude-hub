@@ -1,6 +1,8 @@
 import { atomicWrite, atomicRead } from "./file-store";
 
-const CLIPBOARD_PATH = `${process.env.CLAUDE_HUB_DIR ?? process.env.HOME + "/.claude-hub"}/clipboard.json`;
+import { getClipboardPath } from "../paths";
+
+const CLIPBOARD_PATH = getClipboardPath();
 
 export interface ClipboardEntry {
   id: string;

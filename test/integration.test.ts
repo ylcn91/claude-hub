@@ -576,10 +576,10 @@ describe("token auth: invalid token is rejected by daemon", () => {
     expect(result.type).toBe("auth_fail");
   });
 
-  test("verifyAccountToken utility works correctly", () => {
-    expect(verifyAccountToken("valid-acct", "correct-token")).toBe(true);
-    expect(verifyAccountToken("valid-acct", "wrong")).toBe(false);
-    expect(verifyAccountToken("nonexistent", "any")).toBe(false);
+  test("verifyAccountToken utility works correctly", async () => {
+    expect(await verifyAccountToken("valid-acct", "correct-token")).toBe(true);
+    expect(await verifyAccountToken("valid-acct", "wrong")).toBe(false);
+    expect(await verifyAccountToken("nonexistent", "any")).toBe(false);
   });
 });
 

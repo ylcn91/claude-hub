@@ -36,7 +36,8 @@ export async function launchAccount(
   }
 
   const resolvedDir = opts.dir ?? process.cwd();
-  const configDir = accountConfig.configDir.replace(/^~/, process.env.HOME ?? "");
+  const { assertHomeDir } = await import("../../paths.js");
+  const configDir = accountConfig.configDir.replace(/^~/, assertHomeDir());
   const status = opts.onStatus ?? (() => {});
 
   // Resume from checkpoint
@@ -88,7 +89,8 @@ export async function launchAccount(
     const proc = Bun.spawn(launchCmd, { stdout: "ignore", stderr: "ignore" });
     await proc.exited;
     return { success: true, shellCmd, terminalName: terminal.displayName };
-  } catch (e: any) {
-    return { success: false, shellCmd, error: `Failed to open terminal: ${e.message}` };
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e);
+    return { success: false, shellCmd, error: `Failed to open terminal: ${message}` };
   }
 }

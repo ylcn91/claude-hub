@@ -1,4 +1,4 @@
-import { Database } from "bun:sqlite";
+import { BaseStore } from "./base-store";
 
 export type KnowledgeCategory = "prompt" | "handoff" | "task_event" | "decision_note" | "message";
 
@@ -19,16 +19,28 @@ export interface SearchResult {
   snippet: string;
 }
 
-export class KnowledgeStore {
-  private db: Database;
+interface KnowledgeRow {
+  id: string;
+  category: string;
+  title: string;
+  content: string;
+  tags: string;
+  source_id: string | null;
+  account_name: string | null;
+  indexed_at: string;
+}
 
+interface SearchRow extends KnowledgeRow {
+  snippet: string;
+  rank: number;
+}
+
+export class KnowledgeStore extends BaseStore {
   constructor(dbPath: string) {
-    this.db = new Database(dbPath);
-    this.db.exec("PRAGMA journal_mode = WAL");
-    this.createTables();
+    super(dbPath);
   }
 
-  private createTables(): void {
+  protected createTables(): void {
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS knowledge (
         id TEXT PRIMARY KEY,
@@ -98,7 +110,7 @@ export class KnowledgeStore {
     if (!sanitized) return [];
 
     let sql: string;
-    let params: any[];
+    let params: (string | number)[];
 
     if (category) {
       sql = `
@@ -123,26 +135,26 @@ export class KnowledgeStore {
       params = [sanitized, limit];
     }
 
-    const rows = this.db.query(sql).all(...params) as any[];
+    const rows = this.db.query(sql).all(...params) as SearchRow[];
     return rows.map((row) => ({
-      entry: {
-        id: row.id,
-        category: row.category as KnowledgeCategory,
-        title: row.title,
-        content: row.content,
-        tags: JSON.parse(row.tags),
-        sourceId: row.source_id ?? undefined,
-        accountName: row.account_name ?? undefined,
-        indexedAt: row.indexed_at,
-      },
+      entry: this.deserializeRow(row),
       rank: row.rank,
       snippet: row.snippet,
     }));
   }
 
   getById(id: string): KnowledgeEntry | null {
-    const row = this.db.query(`SELECT * FROM knowledge WHERE id = ?`).get(id) as any;
+    const row = this.db.query(`SELECT * FROM knowledge WHERE id = ?`).get(id) as KnowledgeRow | null;
     if (!row) return null;
+    return this.deserializeRow(row);
+  }
+
+  delete(id: string): boolean {
+    const result = this.db.run(`DELETE FROM knowledge WHERE id = ?`, [id]);
+    return result.changes > 0;
+  }
+
+  private deserializeRow(row: KnowledgeRow): KnowledgeEntry {
     return {
       id: row.id,
       category: row.category as KnowledgeCategory,
@@ -153,14 +165,5 @@ export class KnowledgeStore {
       accountName: row.account_name ?? undefined,
       indexedAt: row.indexed_at,
     };
-  }
-
-  delete(id: string): boolean {
-    const result = this.db.run(`DELETE FROM knowledge WHERE id = ?`, [id]);
-    return result.changes > 0;
-  }
-
-  close(): void {
-    this.db.close();
   }
 }

@@ -1,14 +1,67 @@
 import { atomicWrite, atomicRead, backupFile } from "./services/file-store";
-import { HubConfig, AccountConfig, DEFAULT_CONFIG, CONFIG_PATH } from "./types";
+import { HubConfig, AccountConfig, DEFAULT_CONFIG, PROVIDER_IDS } from "./types";
+import { getConfigPath as getConfigPathFromPaths } from "./paths";
 import type { FeatureFlags } from "./types";
+import { z } from "zod";
 
 const CURRENT_SCHEMA_VERSION = 1;
 
 export function getConfigPath(): string {
-  return process.env.CLAUDE_HUB_DIR
-    ? `${process.env.CLAUDE_HUB_DIR}/config.json`
-    : CONFIG_PATH;
+  return getConfigPathFromPaths();
 }
+
+const AccountConfigSchema = z.object({
+  name: z.string().min(1),
+  configDir: z.string().min(1),
+  color: z.string(),
+  label: z.string(),
+  provider: z.enum(PROVIDER_IDS),
+  quotaPolicy: z.object({
+    plan: z.enum(["max-5x", "max-20x", "pro", "unknown"]),
+    windowMs: z.number(),
+    estimatedLimit: z.number(),
+    source: z.enum(["community-estimate", "custom"]),
+  }).partial().optional(),
+});
+
+const HubConfigSchema = z.object({
+  schemaVersion: z.number(),
+  accounts: z.array(AccountConfigSchema),
+  entire: z.object({ autoEnable: z.boolean() }),
+  notifications: z.object({
+    enabled: z.boolean(),
+    events: z.object({
+      rateLimit: z.boolean(),
+      handoffReceived: z.boolean(),
+      messageReceived: z.boolean(),
+    }),
+    muteList: z.array(z.string()).optional(),
+  }).optional(),
+  features: z.object({
+    workspaceWorktree: z.boolean().optional(),
+    autoAcceptance: z.boolean().optional(),
+    capabilityRouting: z.boolean().optional(),
+    slaEngine: z.boolean().optional(),
+    githubIntegration: z.boolean().optional(),
+    reviewBundles: z.boolean().optional(),
+    knowledgeIndex: z.boolean().optional(),
+    reliability: z.boolean().optional(),
+  }).optional(),
+  github: z.object({
+    enabled: z.boolean(),
+    defaultOwner: z.string().optional(),
+    defaultRepo: z.string().optional(),
+  }).optional(),
+  defaults: z.object({
+    launchInNewWindow: z.boolean(),
+    quotaPolicy: z.object({
+      plan: z.enum(["max-5x", "max-20x", "pro", "unknown"]),
+      windowMs: z.number(),
+      estimatedLimit: z.number(),
+      source: z.enum(["community-estimate", "custom"]),
+    }),
+  }),
+});
 
 export async function loadConfig(path?: string): Promise<HubConfig> {
   const configPath = path ?? getConfigPath();
@@ -16,7 +69,7 @@ export async function loadConfig(path?: string): Promise<HubConfig> {
   if (!raw) return { ...DEFAULT_CONFIG };
 
   // Tolerant parsing: use defaults for missing fields
-  return {
+  const assembled: HubConfig = {
     schemaVersion: (raw.schemaVersion as number) ?? DEFAULT_CONFIG.schemaVersion,
     accounts: Array.isArray(raw.accounts) ? raw.accounts as AccountConfig[] : [],
     entire: {
@@ -33,6 +86,15 @@ export async function loadConfig(path?: string): Promise<HubConfig> {
       },
     },
   };
+
+  // Validate with Zod; on failure, log warning and return defaults
+  const result = HubConfigSchema.safeParse(assembled);
+  if (!result.success) {
+    console.warn("[config] Validation failed, using defaults:", result.error.issues.map(i => `${i.path.join(".")}: ${i.message}`).join("; "));
+    return { ...DEFAULT_CONFIG };
+  }
+
+  return assembled;
 }
 
 export async function saveConfig(config: HubConfig, path?: string): Promise<void> {

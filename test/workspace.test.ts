@@ -1,6 +1,7 @@
 import { describe, test, expect } from "bun:test";
 import {
   validateWorkspaceRequest,
+  isValidBranch,
   isActiveStatus,
   computeWorktreePath,
 } from "../src/services/workspace";
@@ -84,6 +85,87 @@ describe("validateWorkspaceRequest", () => {
     });
     expect(result.valid).toBe(false);
     expect(result.errors.some((e: string) => e.includes("invalid characters"))).toBe(true);
+  });
+
+  test("branch starting with / is invalid", () => {
+    const result = validateWorkspaceRequest({
+      repoPath: "/home/user/repo",
+      branch: "/feature/foo",
+      ownerAccount: "alice",
+    });
+    expect(result.valid).toBe(false);
+  });
+
+  test("branch starting with - is invalid", () => {
+    const result = validateWorkspaceRequest({
+      repoPath: "/home/user/repo",
+      branch: "-dangerous",
+      ownerAccount: "alice",
+    });
+    expect(result.valid).toBe(false);
+  });
+
+  test("branch with namespaced slashes is valid", () => {
+    const result = validateWorkspaceRequest({
+      repoPath: "/home/user/repo",
+      branch: "feature/my-feature",
+      ownerAccount: "alice",
+    });
+    expect(result.valid).toBe(true);
+  });
+
+  test("branch with dot-prefixed segment is invalid", () => {
+    const result = validateWorkspaceRequest({
+      repoPath: "/home/user/repo",
+      branch: "feature/.hidden",
+      ownerAccount: "alice",
+    });
+    expect(result.valid).toBe(false);
+  });
+});
+
+describe("isValidBranch", () => {
+  test("simple branch names are valid", () => {
+    expect(isValidBranch("main")).toBe(true);
+    expect(isValidBranch("develop")).toBe(true);
+    expect(isValidBranch("v1.0.0")).toBe(true);
+  });
+
+  test("namespaced branches are valid", () => {
+    expect(isValidBranch("feature/my-feature")).toBe(true);
+    expect(isValidBranch("user/feature/bar")).toBe(true);
+    expect(isValidBranch("release/1.0")).toBe(true);
+  });
+
+  test("empty branch is invalid", () => {
+    expect(isValidBranch("")).toBe(false);
+  });
+
+  test("branch starting with / is invalid", () => {
+    expect(isValidBranch("/foo")).toBe(false);
+  });
+
+  test("branch starting with - is invalid", () => {
+    expect(isValidBranch("-flag")).toBe(false);
+  });
+
+  test("branch with .. is invalid", () => {
+    expect(isValidBranch("../escape")).toBe(false);
+    expect(isValidBranch("foo/../bar")).toBe(false);
+  });
+
+  test("branch with dot-prefixed segment is invalid", () => {
+    expect(isValidBranch(".hidden")).toBe(false);
+    expect(isValidBranch("feature/.hidden")).toBe(false);
+  });
+
+  test("branch over 200 chars is invalid", () => {
+    expect(isValidBranch("a".repeat(201))).toBe(false);
+    expect(isValidBranch("a".repeat(200))).toBe(true);
+  });
+
+  test("empty segment (double slash) is invalid", () => {
+    expect(isValidBranch("feature//bar")).toBe(false);
   });
 });
 

@@ -49,7 +49,20 @@ export interface ValidationResult {
   errors: string[];
 }
 
-export function validateWorkspaceRequest(req: any): ValidationResult {
+const MAX_BRANCH_LENGTH = 200;
+
+/** Validates a git branch name, rejecting path traversal and unsafe patterns. */
+export function isValidBranch(branch: string): boolean {
+  if (!branch || branch.length > MAX_BRANCH_LENGTH) return false;
+  if (branch.startsWith("/") || branch.startsWith("-")) return false;
+  if (branch.includes("..")) return false;
+  const segments = branch.split("/");
+  return segments.every(
+    (s) => s.length > 0 && !s.startsWith(".") && /^[a-zA-Z0-9][a-zA-Z0-9._-]*$/.test(s),
+  );
+}
+
+export function validateWorkspaceRequest(req: Partial<WorkspaceRequest> | null | undefined): ValidationResult {
   const errors: string[] = [];
 
   if (!req || typeof req.repoPath !== "string" || req.repoPath.trim() === "") {
@@ -60,12 +73,11 @@ export function validateWorkspaceRequest(req: any): ValidationResult {
 
   if (!req || typeof req.branch !== "string" || req.branch.trim() === "") {
     errors.push("branch is required and must be a non-empty string");
-  } else {
-    if (!/^[a-zA-Z0-9_\-\/.]+$/.test(req.branch)) {
-      errors.push("branch contains invalid characters");
-    }
+  } else if (!isValidBranch(req.branch)) {
     if (req.branch.includes("..")) {
       errors.push("branch must not contain '..'");
+    } else {
+      errors.push("branch contains invalid characters");
     }
   }
 

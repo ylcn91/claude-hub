@@ -1,14 +1,38 @@
-import { Database } from "bun:sqlite";
+import { BaseStore } from "./base-store";
 import type { Workspace, WorkspaceEvent, WorkspaceStatus } from "../services/workspace";
+import { getWorkspacesDbPath } from "../paths";
 
-const DB_PATH = `${process.env.CLAUDE_HUB_DIR ?? process.env.HOME + "/.claude-hub"}/workspaces.db`;
+const DB_PATH = getWorkspacesDbPath();
 
-export class WorkspaceStore {
-  private db: Database;
+interface WorkspaceRow {
+  id: string;
+  handoff_id: string;
+  owner_account: string;
+  repo_path: string;
+  branch: string;
+  worktree_path: string;
+  status: string;
+  created_at: string;
+  updated_at: string;
+}
 
+interface WorkspaceEventRow {
+  id: number;
+  workspace_id: string;
+  type: string;
+  timestamp: string;
+  from_status: string | null;
+  to_status: string | null;
+  error: string | null;
+  git_output: string | null;
+}
+
+export class WorkspaceStore extends BaseStore {
   constructor(dbPath?: string) {
-    this.db = new Database(dbPath ?? DB_PATH);
-    this.db.exec("PRAGMA journal_mode=WAL");
+    super(dbPath ?? DB_PATH);
+  }
+
+  protected createTables(): void {
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS workspaces (
         id TEXT PRIMARY KEY,
@@ -62,7 +86,7 @@ export class WorkspaceStore {
   }
 
   getById(id: string): Workspace | null {
-    const row = this.db.query("SELECT * FROM workspaces WHERE id = ?").get(id) as any;
+    const row = this.db.query("SELECT * FROM workspaces WHERE id = ?").get(id) as WorkspaceRow | null;
     if (!row) return null;
     return this.assembleWorkspace(row);
   }
@@ -70,7 +94,7 @@ export class WorkspaceStore {
   getActiveByKey(repoPath: string, branch: string): Workspace | null {
     const row = this.db
       .query("SELECT * FROM workspaces WHERE repo_path = ? AND branch = ? AND status IN ('preparing','ready','cleaning') LIMIT 1")
-      .get(repoPath, branch) as any;
+      .get(repoPath, branch) as WorkspaceRow | null;
     if (!row) return null;
     return this.assembleWorkspace(row);
   }
@@ -78,7 +102,7 @@ export class WorkspaceStore {
   getByStatus(status: WorkspaceStatus): Workspace[] {
     const rows = this.db
       .query("SELECT * FROM workspaces WHERE status = ? ORDER BY created_at ASC")
-      .all(status) as any[];
+      .all(status) as WorkspaceRow[];
     return rows.map((row) => this.assembleWorkspace(row));
   }
 
@@ -87,22 +111,10 @@ export class WorkspaceStore {
     this.db.run("DELETE FROM workspaces WHERE id = ?", [id]);
   }
 
-  close(): void {
-    this.db.close();
-  }
-
-  private assembleWorkspace(row: any): Workspace {
+  private assembleWorkspace(row: WorkspaceRow): Workspace {
     const events = this.db
       .query("SELECT * FROM workspace_events WHERE workspace_id = ? ORDER BY timestamp ASC")
-      .all(row.id)
-      .map((e: any) => ({
-        type: e.type,
-        timestamp: e.timestamp,
-        from: e.from_status ?? undefined,
-        to: e.to_status ?? undefined,
-        error: e.error ?? undefined,
-        gitOutput: e.git_output ?? undefined,
-      }));
+      .all(row.id) as WorkspaceEventRow[];
     return {
       id: row.id,
       handoffId: row.handoff_id,
@@ -110,10 +122,17 @@ export class WorkspaceStore {
       repoPath: row.repo_path,
       branch: row.branch,
       worktreePath: row.worktree_path,
-      status: row.status,
+      status: row.status as WorkspaceStatus,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
-      events,
+      events: events.map((e) => ({
+        type: e.type,
+        timestamp: e.timestamp,
+        from: e.from_status ?? undefined,
+        to: e.to_status ?? undefined,
+        error: e.error ?? undefined,
+        gitOutput: e.git_output ?? undefined,
+      })) as WorkspaceEvent[],
     };
   }
 }

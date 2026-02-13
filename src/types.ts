@@ -70,11 +70,24 @@ export const DEFAULT_CONFIG: HubConfig = {
   },
 };
 
-export const HUB_DIR = `${process.env.HOME}/.claude-hub`;
-export const CONFIG_PATH = `${HUB_DIR}/config.json`;
-export const TOKENS_DIR = `${HUB_DIR}/tokens`;
-export const MESSAGES_DIR = `${HUB_DIR}/messages`;
-export const TASKS_PATH = `${HUB_DIR}/tasks.json`;
-export const DAEMON_PID_PATH = `${HUB_DIR}/daemon.pid`;
-export const DAEMON_SOCK_PATH = `${HUB_DIR}/hub.sock`;
-export const DAEMON_LOG_PATH = `${HUB_DIR}/daemon.log`;
+// Re-export path functions from the consolidated paths module
+export {
+  getHubDir, getSockPath, getPidPath, getTokensDir, getConfigPath,
+  getMessagesDbPath, getWorkspacesDbPath, getCapabilitiesDbPath,
+  getDaemonLogPath, getTasksPath,
+} from "./paths";
+
+// Backward-compatible const aliases (computed once on import via the paths module)
+import {
+  getHubDir as _getHubDir, getConfigPath as _getConfigPath,
+  getTokensDir as _getTokensDir, getTasksPath as _getTasksPath,
+  getPidPath as _getPidPath, getSockPath as _getSockPath,
+  getDaemonLogPath as _getDaemonLogPath,
+} from "./paths";
+export const HUB_DIR = _getHubDir();
+export const CONFIG_PATH = _getConfigPath();
+export const TOKENS_DIR = _getTokensDir();
+export const TASKS_PATH = _getTasksPath();
+export const DAEMON_PID_PATH = _getPidPath();
+export const DAEMON_SOCK_PATH = _getSockPath();
+export const DAEMON_LOG_PATH = _getDaemonLogPath();
