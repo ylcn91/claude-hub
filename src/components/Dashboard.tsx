@@ -60,6 +60,7 @@ export function Dashboard({ onNavigate }: Props) {
     if (input === "u") onNavigate("usage");
     if (input === "t") onNavigate("tasks");
     if (input === "a") onNavigate("add");
+    if (input === "m") onNavigate("inbox");
     if (input === "q") process.exit(0);
   });
 

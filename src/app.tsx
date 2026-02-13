@@ -6,6 +6,7 @@ import { Launcher } from "./components/Launcher.js";
 import { UsageDetail } from "./components/UsageDetail.js";
 import { AddAccount } from "./components/AddAccount.js";
 import { TaskBoard } from "./components/TaskBoard.js";
+import { MessageInbox } from "./components/MessageInbox.js";
 
 export function App() {
   const [view, setView] = useState("dashboard");
@@ -18,6 +19,7 @@ export function App() {
       {view === "usage" && <UsageDetail onNavigate={setView} />}
       {view === "add" && <AddAccount onDone={() => setView("dashboard")} />}
       {view === "tasks" && <TaskBoard onNavigate={setView} />}
+      {view === "inbox" && <MessageInbox onNavigate={setView} />}
     </Box>
   );
 }
