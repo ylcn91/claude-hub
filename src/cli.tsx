@@ -180,6 +180,9 @@ if (command === "daemon" && subcommand === "start") {
     console.error(`Error: ${e.message}`);
     process.exit(1);
   }
+} else if (command === "help") {
+  const { showHelp } = await import("./services/help.js");
+  console.log(showHelp(subcommand));
 } else {
   // Default: TUI mode
   render(<App />);
