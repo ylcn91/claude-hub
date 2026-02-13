@@ -1,6 +1,7 @@
 import type { AgentProvider } from "./types";
 import { ClaudeCodeProvider } from "./claude-code";
 import { CodexCliProvider } from "./codex-cli";
+import { OpenHandsProvider } from "./openhands";
 
 export class ProviderRegistry {
   private providers = new Map<string, AgentProvider>();
@@ -29,5 +30,6 @@ export function createDefaultRegistry(): ProviderRegistry {
   const registry = new ProviderRegistry();
   registry.register(new ClaudeCodeProvider());
   registry.register(new CodexCliProvider());
+  registry.register(new OpenHandsProvider());
   return registry;
 }
