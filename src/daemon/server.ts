@@ -1,5 +1,6 @@
 import { createServer, type Server } from "net";
 import { existsSync, unlinkSync, writeFileSync, readFileSync, mkdirSync } from "fs";
+import { timingSafeEqual } from "crypto";
 import { DaemonState } from "./state";
 import { createLineParser, frameSend } from "./framing";
 import { notifyHandoff, notifyMessage, sendNotification } from "../services/notifications";
@@ -36,7 +37,8 @@ export function verifyAccountToken(account: string, token: string): boolean {
   const tokenPath = `${getTokensDir()}/${account}.token`;
   try {
     const stored = readFileSync(tokenPath, "utf-8").trim();
-    return stored === token;
+    if (stored.length !== token.length) return false;
+    return timingSafeEqual(Buffer.from(stored), Buffer.from(token));
   } catch {
     return false;
   }
@@ -88,6 +90,9 @@ export function startDaemon(opts?: DaemonOpts): { server: Server; state: DaemonS
   if (features?.knowledgeIndex) {
     state.initKnowledge(opts?.knowledgeDbPath);
   }
+  if (features?.githubIntegration) {
+    state.initExternalLinks();
+  }
 
   let watchdog: { stop: () => void } | undefined;
   if (features?.reliability) {
@@ -106,7 +111,13 @@ export function startDaemon(opts?: DaemonOpts): { server: Server; state: DaemonS
     let accountName = "";
 
     const parser = createLineParser((msg) => {
-      // First message must be auth handshake
+      // Allow unauthenticated ping for health checks (reveals no data)
+      if (msg.type === "ping") {
+        socket.write(reply(msg, { type: "pong" }));
+        return;
+      }
+
+      // All other messages require auth
       if (!authenticated) {
         if (msg.type === "auth" && msg.account && msg.token) {
           if (verifyAccountToken(msg.account, msg.token)) {
@@ -122,40 +133,38 @@ export function startDaemon(opts?: DaemonOpts): { server: Server; state: DaemonS
         return;
       }
 
-      // Handle message types
-      if (msg.type === "send_message") {
-        state.addMessage({
-          from: accountName,
-          to: msg.to,
-          type: "message",
-          content: msg.content,
-          timestamp: new Date().toISOString(),
-        });
-        // Fire notification (non-blocking)
-        notifyMessage(accountName, msg.to, msg.content).catch(e => console.error("[notify]", e.message));
-        socket.write(reply(msg, { type: "result", delivered: state.isConnected(msg.to), queued: true }));
-      }
+      // Handler map — O(1) dispatch, guarantees only one handler runs per message
+      const handlers: Record<string, (msg: any) => void> = {
+        send_message: (msg) => {
+          state.addMessage({
+            from: accountName,
+            to: msg.to,
+            type: "message",
+            content: msg.content,
+            timestamp: new Date().toISOString(),
+          });
+          notifyMessage(accountName, msg.to, msg.content).catch(e => console.error("[notify]", e.message));
+          socket.write(reply(msg, { type: "result", delivered: state.isConnected(msg.to), queued: true }));
+        },
 
-      if (msg.type === "count_unread") {
-        const count = state.countUnread(accountName);
-        socket.write(reply(msg, { type: "result", count }));
-        return;
-      }
+        count_unread: (msg) => {
+          const count = state.countUnread(accountName);
+          socket.write(reply(msg, { type: "result", count }));
+        },
 
-      if (msg.type === "read_messages") {
-        const limit = msg.limit as number | undefined;
-        const offset = msg.offset as number | undefined;
-        const messages = (limit || offset)
-          ? state.getMessages(accountName, { limit, offset })
-          : state.getUnreadMessages(accountName);
-        if (!limit && !offset) {
-          state.markAllRead(accountName);
-        }
-        socket.write(reply(msg, { type: "result", messages }));
-      }
+        read_messages: (msg) => {
+          const limit = msg.limit as number | undefined;
+          const offset = msg.offset as number | undefined;
+          const messages = (limit || offset)
+            ? state.getMessages(accountName, { limit, offset })
+            : state.getUnreadMessages(accountName);
+          if (!limit && !offset) {
+            state.markAllRead(accountName);
+          }
+          socket.write(reply(msg, { type: "result", messages }));
+        },
 
-      if (msg.type === "list_accounts") {
-        (async () => {
+        list_accounts: async (msg) => {
           try {
             const connected = new Set(state.getConnectedAccounts());
             const config = await loadConfig();
@@ -163,7 +172,6 @@ export function startDaemon(opts?: DaemonOpts): { server: Server; state: DaemonS
               name: a.name,
               status: connected.has(a.name) ? "active" as const : "inactive" as const,
             }));
-            // Include any connected accounts not in config (shouldn't happen, but be safe)
             for (const name of connected) {
               if (!accounts.some((a) => a.name === name)) {
                 accounts.push({ name, status: "active" as const });
@@ -173,42 +181,38 @@ export function startDaemon(opts?: DaemonOpts): { server: Server; state: DaemonS
           } catch (err: any) {
             socket.write(reply(msg, { type: "error", error: err.message }));
           }
-        })();
-      }
+        },
 
-      if (msg.type === "handoff_task") {
-        // Server-side validation (bypass protection)
-        const validation = validateHandoff(msg.payload);
-        if (!validation.valid) {
+        handoff_task: (msg) => {
+          const validation = validateHandoff(msg.payload);
+          if (!validation.valid) {
+            socket.write(reply(msg, {
+              type: "error",
+              error: "Invalid handoff payload",
+              details: validation.errors,
+            }));
+            return;
+          }
+
+          const handoffMsg = {
+            from: accountName,
+            to: msg.to,
+            type: "handoff" as const,
+            content: JSON.stringify(validation.payload),
+            timestamp: new Date().toISOString(),
+            context: msg.context ?? {},
+          };
+          const handoffId = state.addMessage(handoffMsg);
+          notifyHandoff(accountName, msg.to, validation.payload.goal).catch(e => console.error("[notify]", e.message));
           socket.write(reply(msg, {
-            type: "error",
-            error: "Invalid handoff payload",
-            details: validation.errors,
+            type: "result",
+            delivered: state.isConnected(msg.to),
+            queued: true,
+            handoffId,
           }));
-          return;
-        }
+        },
 
-        const handoffMsg = {
-          from: accountName,
-          to: msg.to,
-          type: "handoff" as const,
-          content: JSON.stringify(validation.payload),
-          timestamp: new Date().toISOString(),
-          context: msg.context ?? {},
-        };
-        const handoffId = state.addMessage(handoffMsg);
-        // Fire notification (non-blocking)
-        notifyHandoff(accountName, msg.to, validation.payload.goal).catch(e => console.error("[notify]", e.message));
-        socket.write(reply(msg, {
-          type: "result",
-          delivered: state.isConnected(msg.to),
-          queued: true,
-          handoffId,
-        }));
-      }
-
-      if (msg.type === "update_task_status") {
-        (async () => {
+        update_task_status: async (msg) => {
           try {
             let board = await loadTasks();
             const status = msg.status as TaskStatus;
@@ -236,30 +240,33 @@ export function startDaemon(opts?: DaemonOpts): { server: Server; state: DaemonS
 
             // F2: GitHub integration hooks (non-blocking)
             if (features?.githubIntegration) {
-              import("../services/integration-hooks").then(({ onTaskStatusChanged }) => {
-                onTaskStatusChanged(msg.taskId, status, { reason: msg.reason }).catch(e =>
-                  console.error("[github]", e.message)
-                );
-              }).catch(e => console.error("[github]", e.message));
+              (async () => {
+                try {
+                  const { onTaskStatusChanged } = await import("../services/integration-hooks");
+                  await onTaskStatusChanged(msg.taskId, status, { reason: msg.reason });
+                } catch (e: any) { console.error("[github]", e.message); }
+              })();
             }
 
             // F3: Auto-generate review bundle on ready_for_review (non-blocking)
             if (status === "ready_for_review" && features?.reviewBundles && task?.workspaceContext) {
-              import("../services/review-bundle").then(({ generateReviewBundle }) => {
-                import("../services/review-bundle-store").then(({ saveBundle }) => {
-                  generateReviewBundle({
+              (async () => {
+                try {
+                  const { generateReviewBundle } = await import("../services/review-bundle");
+                  const { saveBundle } = await import("../services/review-bundle-store");
+                  const bundle = await generateReviewBundle({
                     taskId: msg.taskId,
                     workDir: task.workspaceContext!.workspacePath,
                     branch: task.workspaceContext!.branch,
-                  }).then(bundle => saveBundle(bundle)).catch(e => console.error("[review-bundle]", e.message));
-                });
-              }).catch(e => console.error("[review-bundle]", e.message));
+                  });
+                  await saveBundle(bundle);
+                } catch (e: any) { console.error("[review-bundle]", e.message); }
+              })();
             }
 
             // Auto-acceptance: if transitioning to ready_for_review and feature enabled
             if (status === "ready_for_review" && features?.autoAcceptance && task) {
               socket.write(reply(msg, { type: "result", task, acceptance: "running" }));
-              // Run acceptance async — find handoff run_commands
               (async () => {
                 try {
                   const handoffs = state.getHandoffs(accountName);
@@ -282,7 +289,7 @@ export function startDaemon(opts?: DaemonOpts): { server: Server; state: DaemonS
                     updatedBoard = rejectTask(updatedBoard, msg.taskId, result.summary);
                   }
                   await saveTasks(updatedBoard);
-                } catch(e: any) { console.error("[accept]", e.message) }
+                } catch (e: any) { console.error("[accept]", e.message); }
               })();
             } else {
               socket.write(reply(msg, { type: "result", task }));
@@ -290,23 +297,20 @@ export function startDaemon(opts?: DaemonOpts): { server: Server; state: DaemonS
           } catch (err: any) {
             socket.write(reply(msg, { type: "error", error: err.message }));
           }
-        })();
-      }
+        },
 
-      if (msg.type === "archive_messages") {
-        const archived = state.archiveOld(msg.days);
-        socket.write(reply(msg, { type: "result", archived }));
-      }
+        archive_messages: (msg) => {
+          const archived = state.archiveOld(msg.days);
+          socket.write(reply(msg, { type: "result", archived }));
+        },
 
-      // ── Workspace handlers ──
-      if (msg.type === "prepare_worktree_for_handoff") {
-        if (!state.workspaceManager) {
-          socket.write(reply(msg, { type: "error", error: "Workspace feature not enabled" }));
-          return;
-        }
-        (async () => {
+        prepare_worktree_for_handoff: async (msg) => {
+          if (!state.workspaceManager) {
+            socket.write(reply(msg, { type: "error", error: "Workspace feature not enabled" }));
+            return;
+          }
           try {
-            const result = await state.workspaceManager!.prepareWorktree({
+            const result = await state.workspaceManager.prepareWorktree({
               repoPath: msg.repoPath,
               branch: msg.branch,
               ownerAccount: accountName,
@@ -316,43 +320,37 @@ export function startDaemon(opts?: DaemonOpts): { server: Server; state: DaemonS
           } catch (err: any) {
             socket.write(reply(msg, { type: "error", error: err.message }));
           }
-        })();
-      }
+        },
 
-      if (msg.type === "get_workspace_status") {
-        if (!state.workspaceManager) {
-          socket.write(reply(msg, { type: "error", error: "Workspace feature not enabled" }));
-          return;
-        }
-        (async () => {
+        get_workspace_status: async (msg) => {
+          if (!state.workspaceManager) {
+            socket.write(reply(msg, { type: "error", error: "Workspace feature not enabled" }));
+            return;
+          }
           try {
             const ws = msg.id
-              ? await state.workspaceManager!.getWorkspace(msg.id)
-              : await state.workspaceManager!.getWorkspaceByKey(msg.repoPath, msg.branch);
+              ? await state.workspaceManager.getWorkspace(msg.id)
+              : await state.workspaceManager.getWorkspaceByKey(msg.repoPath, msg.branch);
             socket.write(reply(msg, { type: "result", workspace: ws }));
           } catch (err: any) {
             socket.write(reply(msg, { type: "error", error: err.message }));
           }
-        })();
-      }
+        },
 
-      if (msg.type === "cleanup_workspace") {
-        if (!state.workspaceManager) {
-          socket.write(reply(msg, { type: "error", error: "Workspace feature not enabled" }));
-          return;
-        }
-        (async () => {
+        cleanup_workspace: async (msg) => {
+          if (!state.workspaceManager) {
+            socket.write(reply(msg, { type: "error", error: "Workspace feature not enabled" }));
+            return;
+          }
           try {
-            const result = await state.workspaceManager!.cleanupWorkspace(msg.id);
+            const result = await state.workspaceManager.cleanupWorkspace(msg.id);
             socket.write(reply(msg, { type: "result", ...result }));
           } catch (err: any) {
             socket.write(reply(msg, { type: "error", error: err.message }));
           }
-        })();
-      }
+        },
 
-      if (msg.type === "handoff_accept") {
-        (async () => {
+        handoff_accept: async (msg) => {
           try {
             const handoffs = state.getHandoffs(accountName);
             const handoff = handoffs.find((h: any) => h.id === msg.handoffId);
@@ -364,7 +362,6 @@ export function startDaemon(opts?: DaemonOpts): { server: Server; state: DaemonS
             const context = handoff.context ?? {};
             let workspace = null;
 
-            // Auto-prepare workspace if feature enabled and context has repo info
             if (state.workspaceManager && context.projectDir && context.branch) {
               try {
                 const wsResult = await state.workspaceManager.prepareWorktree({
@@ -374,7 +371,7 @@ export function startDaemon(opts?: DaemonOpts): { server: Server; state: DaemonS
                   handoffId: msg.handoffId,
                 });
                 if (wsResult.ok) workspace = wsResult.data;
-              } catch(e: any) { console.error("[workspace]", e.message) }
+              } catch (e: any) { console.error("[workspace]", e.message); }
             }
 
             socket.write(reply(msg, {
@@ -385,21 +382,17 @@ export function startDaemon(opts?: DaemonOpts): { server: Server; state: DaemonS
           } catch (err: any) {
             socket.write(reply(msg, { type: "error", error: err.message }));
           }
-        })();
-      }
+        },
 
-      // ── Routing handler (F1: workload-aware) ──
-      if (msg.type === "suggest_assignee") {
-        if (!state.capabilityStore) {
-          socket.write(reply(msg, { type: "error", error: "Capability routing not enabled" }));
-          return;
-        }
-        (async () => {
+        suggest_assignee: async (msg) => {
+          if (!state.capabilityStore) {
+            socket.write(reply(msg, { type: "error", error: "Capability routing not enabled" }));
+            return;
+          }
           try {
-            const capabilities = state.capabilityStore!.getAll();
+            const capabilities = state.capabilityStore.getAll();
             const skills: string[] = msg.skills ?? [];
 
-            // F1: Compute workload modifiers
             let workload: Map<string, number> | undefined;
             try {
               const board = await loadTasks();
@@ -419,51 +412,48 @@ export function startDaemon(opts?: DaemonOpts): { server: Server; state: DaemonS
           } catch (err: any) {
             socket.write(reply(msg, { type: "error", error: err.message }));
           }
-        })();
-      }
+        },
 
-      // ── F6: Ping/pong for health checks ──
-      if (msg.type === "ping") {
-        socket.write(reply(msg, { type: "pong" }));
-      }
+        ping: (msg) => {
+          socket.write(reply(msg, { type: "pong" }));
+        },
 
-      // ── F6: Health check handler ──
-      if (msg.type === "health_check") {
-        const status = getHealthStatus(state, state.startedAt);
-        socket.write(reply(msg, { type: "result", ...status }));
-      }
+        health_check: (msg) => {
+          const status = getHealthStatus(state, state.startedAt);
+          socket.write(reply(msg, { type: "result", ...status }));
+        },
 
-      // ── F4: Knowledge handlers ──
-      if (msg.type === "search_knowledge") {
-        if (!state.knowledgeStore) {
-          socket.write(reply(msg, { type: "error", error: "Knowledge index not enabled" }));
-          return;
-        }
-        const results = state.knowledgeStore.search(msg.query, msg.category, msg.limit);
-        socket.write(reply(msg, { type: "result", results }));
-      }
+        search_knowledge: (msg) => {
+          if (!state.knowledgeStore) {
+            socket.write(reply(msg, { type: "error", error: "Knowledge index not enabled" }));
+            return;
+          }
+          const results = state.knowledgeStore.search(msg.query, msg.category, msg.limit);
+          socket.write(reply(msg, { type: "result", results }));
+        },
 
-      if (msg.type === "index_note") {
-        if (!state.knowledgeStore) {
-          socket.write(reply(msg, { type: "error", error: "Knowledge index not enabled" }));
-          return;
-        }
-        const entry = state.knowledgeStore.index({
-          category: msg.category ?? "decision_note",
-          title: msg.title,
-          content: msg.content,
-          tags: msg.tags ?? [],
-          accountName: accountName,
-        });
-        socket.write(reply(msg, { type: "result", entry }));
-      }
+        index_note: (msg) => {
+          if (!state.knowledgeStore) {
+            socket.write(reply(msg, { type: "error", error: "Knowledge index not enabled" }));
+            return;
+          }
+          const entry = state.knowledgeStore.index({
+            category: msg.category ?? "decision_note",
+            title: msg.title,
+            content: msg.content,
+            tags: msg.tags ?? [],
+            accountName: accountName,
+          });
+          socket.write(reply(msg, { type: "result", entry }));
+        },
 
-      // ── F2: External link handlers ──
-      if (msg.type === "link_task") {
-        (async () => {
+        link_task: (msg) => {
+          if (!state.externalLinkStore) {
+            socket.write(reply(msg, { type: "error", error: "GitHub integration not enabled" }));
+            return;
+          }
           try {
-            const { addLink } = await import("../services/external-links");
-            const link = await addLink({
+            const link = state.externalLinkStore.addLink({
               provider: msg.provider ?? "github",
               type: msg.linkType ?? "issue",
               url: msg.url,
@@ -474,24 +464,22 @@ export function startDaemon(opts?: DaemonOpts): { server: Server; state: DaemonS
           } catch (err: any) {
             socket.write(reply(msg, { type: "error", error: err.message }));
           }
-        })();
-      }
+        },
 
-      if (msg.type === "get_task_links") {
-        (async () => {
+        get_task_links: (msg) => {
+          if (!state.externalLinkStore) {
+            socket.write(reply(msg, { type: "error", error: "GitHub integration not enabled" }));
+            return;
+          }
           try {
-            const { getLinksForTask } = await import("../services/external-links");
-            const links = await getLinksForTask(msg.taskId);
+            const links = state.externalLinkStore.getLinksForTask(msg.taskId);
             socket.write(reply(msg, { type: "result", links }));
           } catch (err: any) {
             socket.write(reply(msg, { type: "error", error: err.message }));
           }
-        })();
-      }
+        },
 
-      // ── F3: Review bundle handlers ──
-      if (msg.type === "get_review_bundle") {
-        (async () => {
+        get_review_bundle: async (msg) => {
           try {
             const { getBundle } = await import("../services/review-bundle-store");
             const bundle = await getBundle(msg.taskId);
@@ -499,11 +487,9 @@ export function startDaemon(opts?: DaemonOpts): { server: Server; state: DaemonS
           } catch (err: any) {
             socket.write(reply(msg, { type: "error", error: err.message }));
           }
-        })();
-      }
+        },
 
-      if (msg.type === "generate_review_bundle") {
-        (async () => {
+        generate_review_bundle: async (msg) => {
           try {
             const { generateReviewBundle } = await import("../services/review-bundle");
             const { saveBundle } = await import("../services/review-bundle-store");
@@ -519,12 +505,9 @@ export function startDaemon(opts?: DaemonOpts): { server: Server; state: DaemonS
           } catch (err: any) {
             socket.write(reply(msg, { type: "error", error: err.message }));
           }
-        })();
-      }
+        },
 
-      // ── F5: Analytics handler ──
-      if (msg.type === "get_analytics") {
-        (async () => {
+        get_analytics: async (msg) => {
           try {
             const { computeAnalytics } = await import("../services/analytics");
             const board = await loadTasks();
@@ -536,8 +519,11 @@ export function startDaemon(opts?: DaemonOpts): { server: Server; state: DaemonS
           } catch (err: any) {
             socket.write(reply(msg, { type: "error", error: err.message }));
           }
-        })();
-      }
+        },
+      };
+
+      const handler = handlers[msg.type];
+      if (handler) handler(msg);
     });
 
     socket.on("data", (data) => parser.feed(data));

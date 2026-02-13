@@ -3,6 +3,7 @@ import { WorkspaceStore } from "./workspace-store";
 import { WorkspaceManager } from "./workspace-manager";
 import { CapabilityStore } from "./capability-store";
 import { KnowledgeStore } from "./knowledge-store";
+import { ExternalLinkStore } from "../services/external-links";
 
 export interface Message {
   id?: string;
@@ -22,6 +23,7 @@ export class DaemonState {
   workspaceManager?: WorkspaceManager;
   capabilityStore?: CapabilityStore;
   knowledgeStore?: KnowledgeStore;
+  externalLinkStore?: ExternalLinkStore;
   startedAt: string = new Date().toISOString();
   slaTimerId?: ReturnType<typeof setInterval>;
   onMessagePersist?: (msg: Message) => Promise<void>;
@@ -48,6 +50,10 @@ export class DaemonState {
   initKnowledge(dbPath?: string): void {
     const path = dbPath ?? `${process.env.CLAUDE_HUB_DIR ?? process.env.HOME + "/.claude-hub"}/knowledge.db`;
     this.knowledgeStore = new KnowledgeStore(path);
+  }
+
+  initExternalLinks(dbPath?: string): void {
+    this.externalLinkStore = new ExternalLinkStore(dbPath);
   }
 
   connectAccount(name: string, token: string): void {
@@ -116,6 +122,7 @@ export class DaemonState {
     this.workspaceStore?.close();
     this.capabilityStore?.close();
     this.knowledgeStore?.close();
+    this.externalLinkStore?.close();
     this.store.close();
   }
 }

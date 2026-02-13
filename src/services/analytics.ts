@@ -168,7 +168,7 @@ export function formatAnalyticsSummary(snapshot: AnalyticsSnapshot): string {
   return lines.join("\n");
 }
 
-function formatMs(ms: number): string {
+export function formatMs(ms: number): string {
   if (ms === 0) return "N/A";
   if (ms < 60000) return `${(ms / 1000).toFixed(0)}s`;
   if (ms < 3600000) return `${(ms / 60000).toFixed(1)}m`;

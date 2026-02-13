@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Box, Text, useInput } from "ink";
 import { loadTasks } from "../services/tasks.js";
-import { computeAnalytics, type AnalyticsSnapshot } from "../services/analytics.js";
+import { computeAnalytics, formatMs, type AnalyticsSnapshot } from "../services/analytics.js";
 
 interface Props {
   onNavigate: (view: string) => void;
@@ -69,9 +69,3 @@ export default function Analytics({ onNavigate }: Props) {
   );
 }
 
-function formatMs(ms: number): string {
-  if (ms === 0) return "N/A";
-  if (ms < 60000) return `${(ms / 1000).toFixed(0)}s`;
-  if (ms < 3600000) return `${(ms / 60000).toFixed(1)}m`;
-  return `${(ms / 3600000).toFixed(1)}h`;
-}

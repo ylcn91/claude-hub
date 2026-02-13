@@ -8,7 +8,7 @@ export interface GitHubIssueStatus {
   title: string;
 }
 
-async function runGh(args: string[]): Promise<string> {
+export async function runGh(args: string[]): Promise<string> {
   const proc = Bun.spawn(["gh", ...args], {
     stdout: "pipe",
     stderr: "pipe",
@@ -33,16 +33,16 @@ export async function createIssue(opts: {
     "create",
     "--repo",
     `${opts.owner}/${opts.repo}`,
-    "--title",
-    opts.title,
     "--json",
     "number,url",
   ];
-  if (opts.body) {
-    args.push("--body", opts.body);
-  }
   if (opts.labels && opts.labels.length > 0) {
     args.push("--label", opts.labels.join(","));
+  }
+  // "--" prevents user-supplied content from being interpreted as flags
+  args.push("--title", opts.title);
+  if (opts.body) {
+    args.push("--body", opts.body);
   }
   const stdout = await runGh(args);
   return JSON.parse(stdout) as GitHubIssueResult;

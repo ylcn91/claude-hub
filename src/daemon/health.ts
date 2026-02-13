@@ -66,6 +66,7 @@ export function selfTest(sockPath: string): Promise<boolean> {
     });
 
     socket.on("connect", () => {
+      // Ping is allowed without auth (daemon permits it for health checks)
       socket.write(frameSend({ type: "ping", requestId: "healthcheck" }));
     });
 

@@ -82,8 +82,9 @@ export async function startBridge(account: string): Promise<void> {
   // Connect to daemon
   const daemonSocket = createConnection(DAEMON_SOCK_PATH);
 
-  // Set up the sender (and its parser) before auth so it can handle the auth response
-  const sendToDaemon = createDaemonSender(daemonSocket);
+  // Mutable sender reference so reconnection can swap in a new socket
+  let currentSender = createDaemonSender(daemonSocket);
+  const sendToDaemon: DaemonSender = (msg) => currentSender(msg);
 
   await new Promise<void>((resolve, reject) => {
     daemonSocket.once("connect", async () => {
@@ -118,9 +119,11 @@ export async function startBridge(account: string): Promise<void> {
         const newSocket = createConnection(DAEMON_SOCK_PATH);
         newSocket.once("connect", async () => {
           try {
+            const newSender = createDaemonSender(newSocket);
             const token = getToken(account);
-            const resp = await createDaemonSender(newSocket)({ type: "auth", account, token });
+            const resp = await newSender({ type: "auth", account, token });
             if (resp.type === "auth_ok") {
+              currentSender = newSender;
               reconnectAttempts = 0;
               console.error("[bridge] Reconnected successfully");
             }

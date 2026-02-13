@@ -24,6 +24,7 @@ export async function loadConfig(path?: string): Promise<HubConfig> {
     },
     features: (raw.features as FeatureFlags) ?? undefined,
     notifications: (raw.notifications as HubConfig["notifications"]) ?? undefined,
+    github: (raw.github as HubConfig["github"]) ?? undefined,
     defaults: {
       launchInNewWindow: (raw.defaults as any)?.launchInNewWindow ?? DEFAULT_CONFIG.defaults.launchInNewWindow,
       quotaPolicy: {

@@ -37,7 +37,11 @@ export async function generateReviewBundle(opts: {
     ["git", "diff", "--stat", `${baseBranch}...${opts.branch}`],
     { cwd: opts.workDir, stdout: "pipe", stderr: "pipe" },
   );
-  await statProc.exited;
+  const statExitCode = await statProc.exited;
+  if (statExitCode !== 0) {
+    const stderr = await new Response(statProc.stderr).text();
+    throw new Error(`git diff --stat failed (exit ${statExitCode}): ${stderr}`);
+  }
   const summary = await new Response(statProc.stdout).text();
 
   // Parse last line for stats
@@ -57,7 +61,11 @@ export async function generateReviewBundle(opts: {
     ["git", "diff", `${baseBranch}...${opts.branch}`],
     { cwd: opts.workDir, stdout: "pipe", stderr: "pipe" },
   );
-  await diffProc.exited;
+  const diffExitCode = await diffProc.exited;
+  if (diffExitCode !== 0) {
+    const stderr = await new Response(diffProc.stderr).text();
+    throw new Error(`git diff failed (exit ${diffExitCode}): ${stderr}`);
+  }
   let fullDiff = await new Response(diffProc.stdout).text();
   const MAX_DIFF = 50 * 1024;
   if (fullDiff.length > MAX_DIFF) {

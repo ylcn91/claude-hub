@@ -85,7 +85,18 @@ export class KnowledgeStore {
     return { ...entry, id, indexedAt };
   }
 
+  private sanitizeQuery(query: string): string {
+    return query
+      .split(/\s+/)
+      .filter(Boolean)
+      .map(term => `"${term.replace(/"/g, '""')}"`)
+      .join(' ');
+  }
+
   search(query: string, category?: KnowledgeCategory, limit: number = 20): SearchResult[] {
+    const sanitized = this.sanitizeQuery(query);
+    if (!sanitized) return [];
+
     let sql: string;
     let params: any[];
 
@@ -99,7 +110,7 @@ export class KnowledgeStore {
         ORDER BY rank
         LIMIT ?
       `;
-      params = [query, category, limit];
+      params = [sanitized, category, limit];
     } else {
       sql = `
         SELECT k.*, snippet(knowledge_fts, 1, '<b>', '</b>', '...', 32) as snippet, rank
@@ -109,7 +120,7 @@ export class KnowledgeStore {
         ORDER BY rank
         LIMIT ?
       `;
-      params = [query, limit];
+      params = [sanitized, limit];
     }
 
     const rows = this.db.query(sql).all(...params) as any[];

@@ -3,11 +3,13 @@ import { getHealthStatus, type HealthStatus } from "./health";
 
 export interface WatchdogConfig {
   intervalMs: number;
+  memoryThresholdMb: number;
   onUnhealthy: (status: HealthStatus) => void;
 }
 
 const DEFAULT_CONFIG: WatchdogConfig = {
   intervalMs: 30_000,
+  memoryThresholdMb: 512,
   onUnhealthy: (status) => {
     console.error("[watchdog] Unhealthy:", JSON.stringify(status));
   },
@@ -22,7 +24,7 @@ export function startWatchdog(
 
   const intervalId = setInterval(() => {
     const status = getHealthStatus(state, startedAt);
-    if (!status.messageStoreOk || status.memoryUsageMb > 512) {
+    if (!status.messageStoreOk || status.memoryUsageMb > cfg.memoryThresholdMb) {
       cfg.onUnhealthy(status);
     }
   }, cfg.intervalMs);
