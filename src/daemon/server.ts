@@ -104,3 +104,14 @@ export function stopDaemon(server: Server): void {
   try { unlinkSync(getSockPath()); } catch {}
   try { unlinkSync(getPidPath()); } catch {}
 }
+
+export function stopDaemonByPid(): void {
+  const pidPath = getPidPath();
+  try {
+    const pid = parseInt(readFileSync(pidPath, "utf-8").trim(), 10);
+    process.kill(pid, "SIGTERM");
+    console.log(`Sent SIGTERM to daemon (pid ${pid})`);
+  } catch {
+    console.log("No running daemon found");
+  }
+}
