@@ -575,9 +575,3 @@ claude-hub/
 ├── index.ts                     # Entry point
 └── package.json
 ```
-
----
-
-## License
-
-Private project.
