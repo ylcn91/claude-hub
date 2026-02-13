@@ -9,6 +9,7 @@ export interface Account {
 export interface LaunchOpts {
   dir?: string;
   resume?: boolean;
+  bypassPermissions?: boolean;
 }
 
 // --- Raw usage data (provider-specific shape, read by UsageSource) ---

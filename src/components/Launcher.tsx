@@ -17,6 +17,7 @@ interface LaunchOptions {
   resume: boolean;
   newWindow: boolean;
   autoEntire: boolean;
+  bypassPermissions: boolean;
 }
 
 interface Props {
@@ -32,6 +33,7 @@ export function Launcher({ onNavigate }: Props) {
     resume: false,
     newWindow: true,
     autoEntire: true,
+    bypassPermissions: false,
   });
   const [optionIndex, setOptionIndex] = useState(0);
   const [checkpoints, setCheckpoints] = useState<EntireCheckpoint[]>([]);
@@ -75,10 +77,10 @@ export function Launcher({ onNavigate }: Props) {
       if (key.upArrow) {
         setOptionIndex((i) => Math.max(0, i - 1));
       } else if (key.downArrow) {
-        setOptionIndex((i) => Math.min(2, i + 1));
+        setOptionIndex((i) => Math.min(3, i + 1));
       } else if (input === " ") {
         setOptions((prev) => {
-          const keys: (keyof LaunchOptions)[] = ["resume", "newWindow", "autoEntire"];
+          const keys: (keyof LaunchOptions)[] = ["resume", "newWindow", "autoEntire", "bypassPermissions"];
           const key = keys[optionIndex];
           return { ...prev, [key]: !prev[key] };
         });
@@ -125,6 +127,7 @@ export function Launcher({ onNavigate }: Props) {
     const cmd = provider.buildLaunchCommand(account, {
       dir: directory,
       resume: options.resume,
+      bypassPermissions: options.bypassPermissions,
     });
 
     // cmd is [env, "claude", ...args]
@@ -198,6 +201,7 @@ export function Launcher({ onNavigate }: Props) {
       { key: "resume", label: "Resume last session" },
       { key: "newWindow", label: "Open in new terminal window" },
       { key: "autoEntire", label: "Auto-enable Entire (if git repo)" },
+      { key: "bypassPermissions", label: "Bypass permissions (--dangerously-skip-permissions)" },
     ];
 
     return (

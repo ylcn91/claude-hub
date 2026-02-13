@@ -61,6 +61,7 @@ export class ClaudeCodeProvider implements AgentProvider {
   buildLaunchCommand(account: Account, opts: LaunchOpts): string[] {
     const env = `CLAUDE_CONFIG_DIR=${account.configDir}`;
     const args = ["claude"];
+    if (opts.bypassPermissions) args.push("--dangerously-skip-permissions");
     if (opts.resume) args.push("--resume");
     if (opts.dir) args.push("--dir", opts.dir);
     return [env, ...args];
