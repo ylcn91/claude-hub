@@ -12,6 +12,7 @@ export interface Message {
 export class DaemonState {
   private connectedAccounts = new Map<string, { token: string; connectedAt: string }>();
   private messages: Message[] = [];
+  onMessagePersist?: (msg: Message) => Promise<void>;
 
   connectAccount(name: string, token: string): void {
     this.connectedAccounts.set(name, { token, connectedAt: new Date().toISOString() });
@@ -35,7 +36,11 @@ export class DaemonState {
   }
 
   addMessage(msg: Message): void {
-    this.messages.push({ ...msg, id: crypto.randomUUID(), read: false });
+    const stored = { ...msg, id: crypto.randomUUID(), read: false };
+    this.messages.push(stored);
+    if (this.onMessagePersist) {
+      this.onMessagePersist(stored).catch(() => {});
+    }
   }
 
   getMessages(to: string): Message[] {
@@ -50,5 +55,9 @@ export class DaemonState {
     for (const m of this.messages) {
       if (m.to === to) m.read = true;
     }
+  }
+
+  getHandoffs(to: string): Message[] {
+    return this.messages.filter((m) => m.to === to && m.type === "handoff");
   }
 }

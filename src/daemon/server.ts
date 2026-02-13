@@ -1,5 +1,5 @@
 import { createServer, type Server } from "net";
-import { existsSync, unlinkSync, writeFileSync, readFileSync } from "fs";
+import { existsSync, unlinkSync, writeFileSync, readFileSync, mkdirSync } from "fs";
 import { DaemonState } from "./state";
 
 function getHubDir(): string {
@@ -18,6 +18,10 @@ function getTokensDir(): string {
   return `${getHubDir()}/tokens`;
 }
 
+function getMessagesDir(): string {
+  return `${getHubDir()}/messages`;
+}
+
 export function verifyAccountToken(account: string, token: string): boolean {
   const tokenPath = `${getTokensDir()}/${account}.token`;
   try {
@@ -31,6 +35,20 @@ export function verifyAccountToken(account: string, token: string): boolean {
 export function startDaemon(): { server: Server; state: DaemonState } {
   const state = new DaemonState();
   const sockPath = getSockPath();
+  const messagesDir = getMessagesDir();
+
+  // Ensure messages dir exists for persistence
+  mkdirSync(messagesDir, { recursive: true });
+
+  // Persist handoff messages to disk
+  state.onMessagePersist = async (msg) => {
+    if (msg.type === "handoff" && msg.id) {
+      await Bun.write(
+        `${messagesDir}/${msg.id}.json`,
+        JSON.stringify(msg, null, 2)
+      );
+    }
+  };
 
   // Cleanup orphaned socket
   if (existsSync(sockPath)) unlinkSync(sockPath);
@@ -83,6 +101,25 @@ export function startDaemon(): { server: Server; state: DaemonState } {
             status: "active" as const,
           }));
           socket.write(JSON.stringify({ type: "result", accounts }) + "\n");
+        }
+
+        if (msg.type === "handoff_task") {
+          const handoffMsg = {
+            from: accountName,
+            to: msg.to,
+            type: "handoff" as const,
+            content: msg.task,
+            timestamp: new Date().toISOString(),
+            context: msg.context ?? {},
+          };
+          state.addMessage(handoffMsg);
+          const lastMsg = state.getMessages(msg.to).at(-1);
+          socket.write(JSON.stringify({
+            type: "result",
+            delivered: state.isConnected(msg.to),
+            queued: true,
+            handoffId: lastMsg?.id ?? "",
+          }) + "\n");
         }
       } catch { /* ignore malformed messages */ }
     });

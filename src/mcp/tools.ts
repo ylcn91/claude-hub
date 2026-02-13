@@ -32,4 +32,28 @@ export function registerTools(server: McpServer, sendToDaemon: DaemonSender, acc
     const result = await sendToDaemon({ type: "list_accounts" });
     return { content: [{ type: "text" as const, text: JSON.stringify(result.accounts ?? []) }] };
   });
+
+  server.registerTool("handoff_task", {
+    description: "Hand off a task to another Claude Code account with context (branch, project dir, notes). The task is persisted and delivered when the target account connects.",
+    inputSchema: {
+      to: z.string().describe("Target account name"),
+      task: z.string().describe("Task description"),
+      branch: z.string().optional().describe("Git branch for context"),
+      projectDir: z.string().optional().describe("Project directory path"),
+      notes: z.string().optional().describe("Additional notes or context"),
+    },
+  }, async (args) => {
+    const context: Record<string, string> = {};
+    if (args.branch) context.branch = args.branch;
+    if (args.projectDir) context.projectDir = args.projectDir;
+    if (args.notes) context.notes = args.notes;
+
+    const result = await sendToDaemon({
+      type: "handoff_task",
+      to: args.to,
+      task: args.task,
+      context,
+    });
+    return { content: [{ type: "text" as const, text: JSON.stringify(result) }] };
+  });
 }
