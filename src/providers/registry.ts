@@ -2,6 +2,7 @@ import type { AgentProvider } from "./types";
 import { ClaudeCodeProvider } from "./claude-code";
 import { CodexCliProvider } from "./codex-cli";
 import { OpenHandsProvider } from "./openhands";
+import { GeminiCliProvider } from "./gemini-cli";
 
 export class ProviderRegistry {
   private providers = new Map<string, AgentProvider>();
@@ -31,5 +32,6 @@ export function createDefaultRegistry(): ProviderRegistry {
   registry.register(new ClaudeCodeProvider());
   registry.register(new CodexCliProvider());
   registry.register(new OpenHandsProvider());
+  registry.register(new GeminiCliProvider());
   return registry;
 }
