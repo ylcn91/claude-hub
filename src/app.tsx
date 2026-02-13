@@ -42,7 +42,7 @@ export function App() {
 
   return (
     <Box flexDirection="column">
-      <Header view={view} />
+      <Header view={view} showMascot={view === "dashboard"} />
       {view === "dashboard" && <Dashboard onNavigate={setView} />}
       {view === "launcher" && <Launcher onNavigate={setView} />}
       {view === "usage" && <UsageDetail onNavigate={setView} />}

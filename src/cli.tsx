@@ -35,7 +35,9 @@ const cli = meow(
 `,
   {
     importMeta: import.meta,
+    autoHelp: false,
     flags: {
+      help: { type: "boolean", default: false },
       account: { type: "string" },
       dir: { type: "string" },
       color: { type: "string" },
@@ -49,6 +51,13 @@ const cli = meow(
     },
   }
 );
+
+// Route --help to our custom help (with 91 art)
+if (cli.flags.help) {
+  const { showHelp } = await import("./services/help.js");
+  console.log(showHelp());
+  process.exit(0);
+}
 
 const [command, subcommand] = cli.input;
 

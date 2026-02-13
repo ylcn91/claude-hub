@@ -1,5 +1,19 @@
 import chalk from "chalk";
 
+// "91" block art — displayed on startup and help, like Claude Code's mascot
+export const MASCOT_LINES = [
+  " ▄███▄  ▄█▄",
+  " █   █   ██",
+  " ▀████   ██",
+  "    ██   ██",
+  " ████▀  ▀██▀",
+];
+
+export function coloredMascot(): string {
+  const c = chalk.hex("#89b4fa"); // Catppuccin Blue
+  return MASCOT_LINES.map((line) => c(line)).join("\n");
+}
+
 interface CommandHelp {
   usage: string;
   description: string;
@@ -98,7 +112,8 @@ const COMMANDS: Record<string, CommandHelp> = {
 };
 
 function overview(): string {
-  const title = chalk.bold("Claude Hub (ch)") + " — Multi-account Claude Code manager\n";
+  const mascot = coloredMascot();
+  const title = chalk.bold("Claude Hub (ch)") + " — Multi-account AI agent manager\n";
 
   const sections = [
     {
@@ -151,7 +166,7 @@ function overview(): string {
     "  TUI keybindings: [j/k] navigate  [Enter] select  [Tab] switch view  [q] quit"
   );
 
-  return `\n${title}\n${body}\n${tui}\n`;
+  return `\n${mascot}\n\n${title}\n${body}\n${tui}\n`;
 }
 
 function commandDetail(name: string): string {

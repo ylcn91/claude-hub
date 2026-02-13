@@ -35,7 +35,7 @@ describe("CLI integration", () => {
   test("ch --help shows usage", async () => {
     const result = await $`bun ${CLI_PATH} --help`.env({ ...process.env, CLAUDE_HUB_DIR: TEST_DIR }).quiet().nothrow();
     const output = result.stdout.toString();
-    expect(output).toContain("Usage");
+    expect(output).toContain("Claude Hub");
     expect(output).toContain("ch");
   });
 
