@@ -5,6 +5,7 @@ import { Dashboard } from "./components/Dashboard.js";
 import { Launcher } from "./components/Launcher.js";
 import { UsageDetail } from "./components/UsageDetail.js";
 import { AddAccount } from "./components/AddAccount.js";
+import { TaskBoard } from "./components/TaskBoard.js";
 
 export function App() {
   const [view, setView] = useState("dashboard");
@@ -16,7 +17,7 @@ export function App() {
       {view === "launcher" && <Launcher onNavigate={setView} />}
       {view === "usage" && <UsageDetail onNavigate={setView} />}
       {view === "add" && <AddAccount onDone={() => setView("dashboard")} />}
-      {/* Other views added in subsequent tasks */}
+      {view === "tasks" && <TaskBoard onNavigate={setView} />}
     </Box>
   );
 }
