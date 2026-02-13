@@ -8,6 +8,8 @@ import type { AgentStats, QuotaEstimate } from "../providers/types.js";
 
 const provider = new ClaudeCodeProvider();
 
+const VISIBLE_WINDOW = 8;
+
 interface AccountData {
   account: AccountConfig;
   stats: AgentStats;
@@ -22,6 +24,7 @@ export function Dashboard({ onNavigate }: Props) {
   const [accounts, setAccounts] = useState<AccountData[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [selectedIndex, setSelectedIndex] = useState(0);
 
   useEffect(() => {
     async function load() {
@@ -54,7 +57,15 @@ export function Dashboard({ onNavigate }: Props) {
     load();
   }, []);
 
-  useInput((input) => {
+  useInput((input, key) => {
+    if (key.upArrow) {
+      setSelectedIndex((prev) => Math.max(0, prev - 1));
+      return;
+    }
+    if (key.downArrow) {
+      setSelectedIndex((prev) => Math.min(accounts.length - 1, prev + 1));
+      return;
+    }
     if (input === "d") onNavigate("dashboard");
     if (input === "l") onNavigate("launcher");
     if (input === "u") onNavigate("usage");
@@ -85,9 +96,23 @@ export function Dashboard({ onNavigate }: Props) {
     );
   }
 
+  // Calculate visible window based on selectedIndex
+  const scrollOffset = Math.max(
+    0,
+    Math.min(selectedIndex - Math.floor(VISIBLE_WINDOW / 2), accounts.length - VISIBLE_WINDOW)
+  );
+  const startIndex = Math.max(0, scrollOffset);
+  const endIndex = Math.min(accounts.length, startIndex + VISIBLE_WINDOW);
+  const visibleAccounts = accounts.slice(startIndex, endIndex);
+  const aboveCount = startIndex;
+  const belowCount = accounts.length - endIndex;
+
   return (
     <Box flexDirection="column" paddingY={1}>
-      {accounts.map((a) => (
+      {aboveCount > 0 && (
+        <Text color="gray">{`▲ ${aboveCount} more`}</Text>
+      )}
+      {visibleAccounts.map((a, i) => (
         <AccountCard
           key={a.account.name}
           account={a.account}
@@ -96,6 +121,9 @@ export function Dashboard({ onNavigate }: Props) {
           unreadMessages={0}
         />
       ))}
+      {belowCount > 0 && (
+        <Text color="gray">{`▼ ${belowCount} more`}</Text>
+      )}
     </Box>
   );
 }

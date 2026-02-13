@@ -21,6 +21,7 @@ interface Props {
 export function UsageDetail({ onNavigate }: Props) {
   const [accounts, setAccounts] = useState<AccountUsage[]>([]);
   const [loading, setLoading] = useState(true);
+  const [selectedAccount, setSelectedAccount] = useState(0);
 
   useEffect(() => {
     async function load() {
@@ -46,6 +47,12 @@ export function UsageDetail({ onNavigate }: Props) {
 
   useInput((input, key) => {
     if (key.escape || input === "d") onNavigate("dashboard");
+    if (key.leftArrow) {
+      setSelectedAccount((prev) => Math.max(0, prev - 1));
+    }
+    if (key.rightArrow) {
+      setSelectedAccount((prev) => Math.min(accounts.length - 1, prev + 1));
+    }
   });
 
   if (loading) return <Text color="gray">Loading usage data...</Text>;
@@ -61,20 +68,14 @@ export function UsageDetail({ onNavigate }: Props) {
 
   const maxWeekly = Math.max(...accounts.map((a) => a.weeklyTotal), 1);
 
-  // Aggregate model usage across all accounts
-  const modelTotals = new Map<string, number>();
-  for (const { stats } of accounts) {
-    for (const [model, usage] of Object.entries(stats.modelUsage)) {
-      const total = usage.inputTokens + usage.outputTokens;
-      modelTotals.set(model, (modelTotals.get(model) ?? 0) + total);
-    }
-  }
-  const totalTokens = Array.from(modelTotals.values()).reduce((a, b) => a + b, 0);
+  // Current account detail
+  const current = accounts[selectedAccount];
+  const currentStats = current?.stats;
 
-  // Aggregate daily activity across all accounts for last 7 days
+  // Build daily breakdown for the selected account
   const dailyMap = new Map<string, number>();
-  for (const { stats } of accounts) {
-    for (const day of stats.weeklyActivity) {
+  if (currentStats) {
+    for (const day of currentStats.weeklyActivity) {
       dailyMap.set(day.date, (dailyMap.get(day.date) ?? 0) + day.messageCount);
     }
   }
@@ -82,6 +83,16 @@ export function UsageDetail({ onNavigate }: Props) {
     ([a], [b]) => a.localeCompare(b)
   );
   const maxDaily = Math.max(...dailyEntries.map(([, v]) => v), 1);
+
+  // Model usage for selected account
+  const modelTotals = new Map<string, number>();
+  if (currentStats) {
+    for (const [model, usage] of Object.entries(currentStats.modelUsage)) {
+      const total = usage.inputTokens + usage.outputTokens;
+      modelTotals.set(model, (modelTotals.get(model) ?? 0) + total);
+    }
+  }
+  const totalTokens = Array.from(modelTotals.values()).reduce((a, b) => a + b, 0);
 
   return (
     <Box flexDirection="column" paddingY={1}>
@@ -101,54 +112,62 @@ export function UsageDetail({ onNavigate }: Props) {
         ))}
       </Box>
 
-      <Box marginTop={1} flexDirection="column">
-        <Text bold>Daily breakdown (last 7 days):</Text>
-        {dailyEntries.map(([date, count]) => {
-          const dayName = new Date(date + "T12:00:00").toLocaleDateString(
-            "en-US",
-            { weekday: "short" }
-          );
-          const barWidth = Math.round((count / maxDaily) * 15);
-          return (
-            <Box key={date}>
-              <Box width={6}>
-                <Text>{dayName}</Text>
-              </Box>
-              <Text color="cyan">{"█".repeat(barWidth)}</Text>
-              <Text color="gray">{"░".repeat(15 - barWidth)}</Text>
-              <Text> {count}</Text>
-            </Box>
-          );
-        })}
-      </Box>
-
-      {totalTokens > 0 && (
+      {current && (
         <Box marginTop={1} flexDirection="column">
-          <Text bold>Model split:</Text>
-          {Array.from(modelTotals.entries())
-            .sort(([, a], [, b]) => b - a)
-            .map(([model, tokens]) => {
-              const pct = Math.round((tokens / totalTokens) * 100);
-              const shortName = model
-                .replace("claude-", "")
-                .replace("-20250929", "");
-              const barWidth = Math.round((pct / 100) * 15);
+          <Text bold color={current.account.color}>
+            {current.account.name} ({selectedAccount + 1}/{accounts.length}) [←/→ to page]
+          </Text>
+
+          <Box marginTop={1} flexDirection="column">
+            <Text bold>Daily breakdown (last 7 days):</Text>
+            {dailyEntries.map(([date, count]) => {
+              const dayName = new Date(date + "T12:00:00").toLocaleDateString(
+                "en-US",
+                { weekday: "short" }
+              );
+              const barWidth = Math.round((count / maxDaily) * 15);
               return (
-                <Box key={model}>
-                  <Box width={16}>
-                    <Text>{shortName}</Text>
+                <Box key={date}>
+                  <Box width={6}>
+                    <Text>{dayName}</Text>
                   </Box>
-                  <Text color="magenta">{"█".repeat(barWidth)}</Text>
+                  <Text color="cyan">{"█".repeat(barWidth)}</Text>
                   <Text color="gray">{"░".repeat(15 - barWidth)}</Text>
-                  <Text> {pct}%</Text>
+                  <Text> {count}</Text>
                 </Box>
               );
             })}
+          </Box>
+
+          {totalTokens > 0 && (
+            <Box marginTop={1} flexDirection="column">
+              <Text bold>Model split:</Text>
+              {Array.from(modelTotals.entries())
+                .sort(([, a], [, b]) => b - a)
+                .map(([model, tokens]) => {
+                  const pct = Math.round((tokens / totalTokens) * 100);
+                  const shortName = model
+                    .replace("claude-", "")
+                    .replace("-20250929", "");
+                  const barWidth = Math.round((pct / 100) * 15);
+                  return (
+                    <Box key={model}>
+                      <Box width={16}>
+                        <Text>{shortName}</Text>
+                      </Box>
+                      <Text color="magenta">{"█".repeat(barWidth)}</Text>
+                      <Text color="gray">{"░".repeat(15 - barWidth)}</Text>
+                      <Text> {pct}%</Text>
+                    </Box>
+                  );
+                })}
+            </Box>
+          )}
         </Box>
       )}
 
       <Box marginTop={1}>
-        <Text color="gray">[Esc] Back</Text>
+        <Text color="gray">[Esc] Back [←/→] Page accounts</Text>
       </Box>
     </Box>
   );
