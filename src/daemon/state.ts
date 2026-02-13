@@ -1,4 +1,7 @@
 import { MessageStore } from "./message-store";
+import { WorkspaceStore } from "./workspace-store";
+import { WorkspaceManager } from "./workspace-manager";
+import { CapabilityStore } from "./capability-store";
 
 export interface Message {
   id?: string;
@@ -14,10 +17,24 @@ export interface Message {
 export class DaemonState {
   private connectedAccounts = new Map<string, { token: string; connectedAt: string }>();
   private store: MessageStore;
+  workspaceStore?: WorkspaceStore;
+  workspaceManager?: WorkspaceManager;
+  capabilityStore?: CapabilityStore;
+  slaTimerId?: ReturnType<typeof setInterval>;
   onMessagePersist?: (msg: Message) => Promise<void>;
 
   constructor(dbPath?: string) {
     this.store = new MessageStore(dbPath);
+  }
+
+  initWorkspace(dbPath?: string): void {
+    this.workspaceStore = new WorkspaceStore(dbPath);
+    this.workspaceManager = new WorkspaceManager(this.workspaceStore);
+    this.workspaceManager.recoverStaleWorkspaces();
+  }
+
+  initCapabilities(dbPath?: string): void {
+    this.capabilityStore = new CapabilityStore(dbPath);
   }
 
   connectAccount(name: string, token: string): void {
@@ -52,7 +69,7 @@ export class DaemonState {
     });
     const stored = { ...msg, id, read: false };
     if (this.onMessagePersist) {
-      this.onMessagePersist(stored).catch(() => {});
+      this.onMessagePersist(stored).catch(e => console.error("[persist]", e.message));
     }
     return id;
   }
@@ -63,6 +80,10 @@ export class DaemonState {
 
   getUnreadMessages(to: string): Message[] {
     return this.store.getUnreadMessages(to);
+  }
+
+  countUnread(to: string): number {
+    return this.store.countUnread(to);
   }
 
   markAllRead(to: string): void {
@@ -78,6 +99,9 @@ export class DaemonState {
   }
 
   close(): void {
+    if (this.slaTimerId) clearInterval(this.slaTimerId);
+    this.workspaceStore?.close();
+    this.capabilityStore?.close();
     this.store.close();
   }
 }

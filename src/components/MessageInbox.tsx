@@ -44,7 +44,7 @@ export function MessageInbox({ onNavigate }: Props) {
         }
 
         setAccounts(results);
-      } catch {}
+      } catch(e: any) { console.error("[inbox]", e.message) }
       setLoading(false);
     }
     load();

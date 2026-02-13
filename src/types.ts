@@ -17,6 +17,13 @@ export interface AccountConfig {
   quotaPolicy?: Partial<QuotaPolicyConfig>;
 }
 
+export interface FeatureFlags {
+  workspaceWorktree?: boolean;
+  autoAcceptance?: boolean;
+  capabilityRouting?: boolean;
+  slaEngine?: boolean;
+}
+
 export interface HubConfig {
   schemaVersion: number;
   accounts: AccountConfig[];
@@ -30,6 +37,7 @@ export interface HubConfig {
     };
     muteList?: string[];
   };
+  features?: FeatureFlags;
   defaults: {
     launchInNewWindow: boolean;
     quotaPolicy: QuotaPolicyConfig;

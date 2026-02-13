@@ -1,5 +1,6 @@
 import { atomicWrite, atomicRead, backupFile } from "./services/file-store";
 import { HubConfig, AccountConfig, DEFAULT_CONFIG, CONFIG_PATH } from "./types";
+import type { FeatureFlags } from "./types";
 
 const CURRENT_SCHEMA_VERSION = 1;
 
@@ -21,6 +22,8 @@ export async function loadConfig(path?: string): Promise<HubConfig> {
     entire: {
       autoEnable: (raw.entire as any)?.autoEnable ?? DEFAULT_CONFIG.entire.autoEnable,
     },
+    features: (raw.features as FeatureFlags) ?? undefined,
+    notifications: (raw.notifications as HubConfig["notifications"]) ?? undefined,
     defaults: {
       launchInNewWindow: (raw.defaults as any)?.launchInNewWindow ?? DEFAULT_CONFIG.defaults.launchInNewWindow,
       quotaPolicy: {
@@ -52,7 +55,7 @@ export async function setConfigValue(dotPath: string, value: string): Promise<{ 
   const keys = dotPath.split(".");
   let obj: any = config;
   for (let i = 0; i < keys.length - 1; i++) {
-    if (obj[keys[i]] === undefined) throw new Error(`Invalid config path: ${dotPath}`);
+    if (obj[keys[i]] === undefined) obj[keys[i]] = {};
     obj = obj[keys[i]];
   }
   const lastKey = keys[keys.length - 1];

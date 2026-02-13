@@ -3,12 +3,20 @@ import { atomicWrite, atomicRead } from "./file-store";
 export type TaskStatus = "todo" | "in_progress" | "ready_for_review" | "accepted" | "rejected";
 export type TaskPriority = "P0" | "P1" | "P2";
 
+export type TaskEventType = "status_changed" | "review_rejected" | "review_accepted" | "cleanup_queued";
+
 export interface TaskEvent {
-  type: "status_changed" | "review_rejected" | "review_accepted";
+  type: TaskEventType;
   timestamp: string;
   from?: TaskStatus;
   to?: TaskStatus;
   reason?: string;
+}
+
+export interface WorkspaceContext {
+  workspacePath: string;
+  branch: string;
+  workspaceId?: string;
 }
 
 export interface Task {
@@ -21,6 +29,7 @@ export interface Task {
   dueDate?: string;
   tags?: string[];
   events: TaskEvent[];
+  workspaceContext?: WorkspaceContext;
 }
 
 export const VALID_TRANSITIONS: Record<TaskStatus, TaskStatus[]> = {
@@ -126,6 +135,28 @@ export function rejectTask(board: TaskBoard, id: string, reason: string): TaskBo
   };
 }
 
+export function submitForReview(board: TaskBoard, id: string, wsContext?: WorkspaceContext): TaskBoard {
+  const task = board.tasks.find((t) => t.id === id);
+  if (!task) throw new Error(`Task ${id} not found`);
+  if (task.status !== "in_progress") {
+    throw new Error(`Cannot submit for review: status is ${task.status}, expected in_progress`);
+  }
+
+  const now = new Date().toISOString();
+  const events: TaskEvent[] = [
+    ...task.events,
+    { type: "status_changed", timestamp: now, from: "in_progress", to: "ready_for_review" },
+  ];
+
+  return {
+    tasks: board.tasks.map((t) =>
+      t.id === id
+        ? { ...t, status: "ready_for_review" as TaskStatus, events, workspaceContext: wsContext ?? t.workspaceContext }
+        : t
+    ),
+  };
+}
+
 export function acceptTask(board: TaskBoard, id: string): TaskBoard {
   const task = board.tasks.find((t) => t.id === id);
   if (!task) throw new Error(`Task ${id} not found`);
@@ -138,6 +169,7 @@ export function acceptTask(board: TaskBoard, id: string): TaskBoard {
     ...task.events,
     { type: "status_changed", timestamp: now, from: "ready_for_review", to: "accepted" },
     { type: "review_accepted", timestamp: now, from: "ready_for_review", to: "accepted" },
+    ...(task.workspaceContext ? [{ type: "cleanup_queued" as TaskEventType, timestamp: now }] : []),
   ];
 
   return {

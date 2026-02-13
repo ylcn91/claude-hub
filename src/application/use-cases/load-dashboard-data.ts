@@ -51,7 +51,7 @@ export async function loadDashboardData(configPath?: string): Promise<DashboardD
   // Rate limit notifications
   for (const item of accounts) {
     if (item.quota.percent >= 80) {
-      notifyRateLimit(item.account.name).catch(() => {});
+      notifyRateLimit(item.account.name).catch(e => console.error("[dash]", e.message));
     }
   }
 
@@ -83,7 +83,7 @@ export async function loadDashboardData(configPath?: string): Promise<DashboardD
   let unreadCounts = new Map<string, number>();
   try {
     unreadCounts = await fetchUnreadCounts(config.accounts.map((a) => a.name));
-  } catch {}
+  } catch(e: any) { console.error("[dash]", e.message) }
 
   return { accounts, entireStatuses, unreadCounts };
 }

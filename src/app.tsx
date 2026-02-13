@@ -8,6 +8,8 @@ import { UsageDetail } from "./components/UsageDetail.js";
 import { AddAccount } from "./components/AddAccount.js";
 import { TaskBoard } from "./components/TaskBoard.js";
 import { MessageInbox } from "./components/MessageInbox.js";
+import { SLABoard } from "./components/SLABoard.js";
+import { PromptLibrary } from "./components/PromptLibrary.js";
 
 const NAV_KEYS: Record<string, string> = {
   d: "dashboard",
@@ -16,6 +18,8 @@ const NAV_KEYS: Record<string, string> = {
   t: "tasks",
   m: "inbox",
   a: "add",
+  e: "sla",
+  r: "prompts",
 };
 
 export function App() {
@@ -25,7 +29,7 @@ export function App() {
   useEffect(() => {
     loadConfig().then((config) => {
       setAccountNames(config.accounts.map((a) => a.name));
-    }).catch(() => {});
+    }).catch(e => console.error("[app]", e.message));
   }, []);
 
   // Global navigation - works from any view
@@ -45,6 +49,8 @@ export function App() {
       {view === "add" && <AddAccount onDone={() => setView("dashboard")} />}
       {view === "tasks" && <TaskBoard onNavigate={setView} accounts={accountNames} />}
       {view === "inbox" && <MessageInbox onNavigate={setView} />}
+      {view === "sla" && <SLABoard onNavigate={setView} />}
+      {view === "prompts" && <PromptLibrary onNavigate={setView} />}
     </Box>
   );
 }

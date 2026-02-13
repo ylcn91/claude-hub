@@ -152,7 +152,7 @@ export function TaskBoard({ onNavigate, accounts = [] }: Props) {
         try {
           const newBoard = updateTaskStatus(board, task.id, allowed[0]);
           persist(newBoard);
-        } catch {}
+        } catch(e: any) { console.error("[taskboard]", e.message) }
       }
     } else if (input === "v" && flatTasks[selectedIndex]) {
       // Accept task (only valid on ready_for_review)
@@ -161,7 +161,7 @@ export function TaskBoard({ onNavigate, accounts = [] }: Props) {
         try {
           const newBoard = acceptTask(board, task.id);
           persist(newBoard);
-        } catch {}
+        } catch(e: any) { console.error("[taskboard]", e.message) }
       }
     } else if (input === "x" && flatTasks[selectedIndex]) {
       // Reject task (only valid on ready_for_review)

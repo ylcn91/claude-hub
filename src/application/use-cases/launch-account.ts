@@ -2,6 +2,7 @@ import { loadConfig } from "../../config.js";
 import { registry } from "../../providers/index.js";
 import { terminalRegistry } from "../../terminals/registry.js";
 import { isEntireInstalled, enableEntire, resumeCheckpoint } from "../../services/entire.js";
+import { buildShellCommand } from "../../services/shell-quote.js";
 import type { Account } from "../../providers/types.js";
 
 export interface LaunchAccountOpts {
@@ -68,9 +69,7 @@ export async function launchAccount(
     bypassPermissions: opts.bypassPermissions,
   });
 
-  const envPart = cmd[0];
-  const args = cmd.slice(1);
-  const shellCmd = `${envPart} ${args.join(" ")}`;
+  const shellCmd = buildShellCommand(cmd);
 
   if (opts.noWindow) {
     return { success: true, shellCmd };

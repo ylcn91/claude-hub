@@ -41,6 +41,8 @@ function createMockDaemon(messages: any[]): Promise<{ server: Server; sockPath: 
               socket.write(JSON.stringify({ type: "auth_ok", ...rid }) + "\n");
             } else if (msg.type === "read_messages") {
               socket.write(JSON.stringify({ type: "result", messages, ...rid }) + "\n");
+            } else if (msg.type === "count_unread") {
+              socket.write(JSON.stringify({ type: "result", count: messages.length, ...rid }) + "\n");
             }
           } catch {}
         }

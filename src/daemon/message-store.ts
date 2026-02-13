@@ -69,6 +69,10 @@ export class MessageStore {
     return result.changes;
   }
 
+  countUnread(to: string): number {
+    return (this.db.query(`SELECT COUNT(*) as count FROM messages WHERE "to" = ? AND read = 0`).get(to) as any).count;
+  }
+
   getHandoffs(to: string): any[] {
     return this.db
       .query(`SELECT * FROM messages WHERE "to" = ? AND type = 'handoff' ORDER BY timestamp DESC`)

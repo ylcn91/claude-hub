@@ -16,6 +16,10 @@ export function Header({ view }: { view: string }) {
       <Text> </Text>
       <Text color={view === "inbox" ? "cyan" : "gray"}>[m]sg</Text>
       <Text> </Text>
+      <Text color={view === "sla" ? "cyan" : "gray"}>[e]sla</Text>
+      <Text> </Text>
+      <Text color={view === "prompts" ? "cyan" : "gray"}>[r]prompts</Text>
+      <Text> </Text>
       <Text color="gray">[a]dd [q]uit</Text>
     </Box>
   );
