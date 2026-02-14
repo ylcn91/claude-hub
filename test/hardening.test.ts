@@ -7,12 +7,12 @@ import { join } from "path";
 
 describe("paths module", () => {
   const originalHome = process.env.HOME;
-  const originalHubDir = process.env.CLAUDE_HUB_DIR;
+  const originalHubDir = process.env.AGENTCTL_DIR;
 
   afterEach(() => {
     process.env.HOME = originalHome;
-    if (originalHubDir) process.env.CLAUDE_HUB_DIR = originalHubDir;
-    else delete process.env.CLAUDE_HUB_DIR;
+    if (originalHubDir) process.env.AGENTCTL_DIR = originalHubDir;
+    else delete process.env.AGENTCTL_DIR;
   });
 
   test("assertHomeDir throws when HOME is unset", async () => {
@@ -21,22 +21,22 @@ describe("paths module", () => {
     expect(() => assertHomeDir()).toThrow("HOME environment variable is not set");
   });
 
-  test("getHubDir uses CLAUDE_HUB_DIR when set", async () => {
+  test("getHubDir uses AGENTCTL_DIR when set", async () => {
     const { getHubDir } = await import("../src/paths");
-    process.env.CLAUDE_HUB_DIR = "/custom/hub";
+    process.env.AGENTCTL_DIR = "/custom/hub";
     expect(getHubDir()).toBe("/custom/hub");
   });
 
-  test("getHubDir falls back to HOME/.claude-hub", async () => {
+  test("getHubDir falls back to HOME/.agentctl", async () => {
     const { getHubDir } = await import("../src/paths");
-    delete process.env.CLAUDE_HUB_DIR;
+    delete process.env.AGENTCTL_DIR;
     process.env.HOME = "/test-home";
-    expect(getHubDir()).toBe("/test-home/.claude-hub");
+    expect(getHubDir()).toBe("/test-home/.agentctl");
   });
 
   test("all path functions derive from getHubDir", async () => {
     const paths = await import("../src/paths");
-    process.env.CLAUDE_HUB_DIR = "/hub";
+    process.env.AGENTCTL_DIR = "/hub";
     expect(paths.getSockPath()).toBe("/hub/hub.sock");
     expect(paths.getPidPath()).toBe("/hub/daemon.pid");
     expect(paths.getTokensDir()).toBe("/hub/tokens");
@@ -145,12 +145,12 @@ describe("daemon server hardening", () => {
 
   beforeEach(() => {
     mkdirSync(tokensDir, { recursive: true });
-    process.env.CLAUDE_HUB_DIR = testDir;
+    process.env.AGENTCTL_DIR = testDir;
   });
 
   afterEach(() => {
     rmSync(testDir, { recursive: true, force: true });
-    delete process.env.CLAUDE_HUB_DIR;
+    delete process.env.AGENTCTL_DIR;
   });
 
   test("verifyAccountToken is async and validates correctly", async () => {
@@ -193,12 +193,12 @@ describe("config schema validation", () => {
 
   beforeEach(() => {
     mkdirSync(testDir, { recursive: true });
-    process.env.CLAUDE_HUB_DIR = testDir;
+    process.env.AGENTCTL_DIR = testDir;
   });
 
   afterEach(() => {
     rmSync(testDir, { recursive: true, force: true });
-    delete process.env.CLAUDE_HUB_DIR;
+    delete process.env.AGENTCTL_DIR;
   });
 
   test("loadConfig returns defaults for nonexistent file", async () => {
@@ -272,8 +272,8 @@ describe("bug regressions", () => {
   test("[P1] socket parent dir: daemon creates nested sockPath directories", async () => {
     const nestedDir = join(tmpdir(), `hub-nested-${Date.now()}`, "sub", "dir");
     const sockPath = join(nestedDir, "test.sock");
-    process.env.CLAUDE_HUB_DIR = join(tmpdir(), `hub-nested-${Date.now()}`);
-    mkdirSync(join(process.env.CLAUDE_HUB_DIR, "tokens"), { recursive: true });
+    process.env.AGENTCTL_DIR = join(tmpdir(), `hub-nested-${Date.now()}`);
+    mkdirSync(join(process.env.AGENTCTL_DIR, "tokens"), { recursive: true });
 
     const { startDaemon, stopDaemon } = await import("../src/daemon/server");
     const { server, watchdog } = startDaemon({ dbPath: ":memory:", sockPath });
@@ -281,8 +281,8 @@ describe("bug regressions", () => {
     const { existsSync: exists } = await import("fs");
     expect(exists(nestedDir)).toBe(true);
     stopDaemon(server, sockPath, watchdog);
-    rmSync(process.env.CLAUDE_HUB_DIR, { recursive: true, force: true });
-    delete process.env.CLAUDE_HUB_DIR;
+    rmSync(process.env.AGENTCTL_DIR, { recursive: true, force: true });
+    delete process.env.AGENTCTL_DIR;
   });
 
   test("[P1] server.ts no longer has duplicate path functions", async () => {

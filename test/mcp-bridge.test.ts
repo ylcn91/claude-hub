@@ -20,7 +20,7 @@ afterEach(() => {
 describe("MCP tools registration", () => {
   test("registerTools adds send_message, read_messages, list_accounts tools to McpServer", () => {
     const mcpServer = new McpServer(
-      { name: "claude-hub-test", version: "1.0.0" },
+      { name: "agentctl-test", version: "1.0.0" },
       { capabilities: { tools: {} } }
     );
 
@@ -46,7 +46,7 @@ describe("MCP tools registration", () => {
 describe("MCP tools return correct results", () => {
   test("send_message tool returns delivery result", async () => {
     const mcpServer = new McpServer(
-      { name: "claude-hub-test", version: "1.0.0" },
+      { name: "agentctl-test", version: "1.0.0" },
       { capabilities: { tools: {} } }
     );
 
@@ -133,7 +133,7 @@ describe("MCP tools return correct results", () => {
 
   test("registerTools does not throw for all four tools", () => {
     const mcpServer = new McpServer(
-      { name: "claude-hub-test", version: "1.0.0" },
+      { name: "agentctl-test", version: "1.0.0" },
       { capabilities: { tools: {} } }
     );
 

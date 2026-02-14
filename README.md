@@ -7,15 +7,15 @@
  ╚════╝   ╚═╝
 ```
 
-# Claude Hub
+# agentctl
 
 **Multi-account AI agent manager** — run multiple Claude Code, Codex CLI, OpenHands, and Gemini CLI accounts from a single TUI dashboard with inter-agent messaging, task handoff, SLA monitoring, and capability-based routing.
 
 ```
-ch                          # launch TUI dashboard
-ch add work                 # add a new account
-ch launch work ~/project    # open in a new terminal
-ch daemon start             # enable inter-agent communication
+ac                          # launch TUI dashboard
+ac add work                 # add a new account
+ac launch work ~/project    # open in a new terminal
+ac daemon start             # enable inter-agent communication
 ```
 
 ---
@@ -35,7 +35,7 @@ ch daemon start             # enable inter-agent communication
 - **Notifications** — OS-native notifications for rate limits, handoffs, and messages
 - **Multi-provider** — Claude Code, Codex CLI, OpenHands, Gemini CLI
 - **Multi-terminal** — WezTerm, iTerm2, GNOME Terminal, Windows Terminal
-- **MCP bridge** — 21 MCP tools for AI agents to interact with the hub programmatically
+- **MCP bridge** — 21 MCP tools for AI agents to interact with agentctl programmatically
 
 ---
 
@@ -47,21 +47,21 @@ bun install
 bun link
 
 # Add your first account
-ch add work
+ac add work
 
 # Start the daemon (enables messaging & handoff)
-ch daemon start
+ac daemon start
 
 # Launch the TUI
-ch
+ac
 ```
 
 ### Adding accounts
 
 ```bash
-ch add work                                    # defaults to claude-code provider
-ch add codex --provider codex-cli              # use Codex CLI
-ch add review --color "#f38ba8" --label "Code Review"
+ac add work                                    # defaults to claude-code provider
+ac add codex --provider codex-cli              # use Codex CLI
+ac add review --color "#f38ba8" --label "Code Review"
 ```
 
 Each account gets:
@@ -77,14 +77,14 @@ Each account gets:
 
 | Command | Description |
 |---------|-------------|
-| `ch add <name>` | Add new account |
-| `ch remove <name>` | Remove account |
-| `ch rotate-token <name>` | Rotate account token |
-| `ch list` | List all accounts |
-| `ch status` | Show account status and quota |
-| `ch usage` | Detailed usage table |
+| `ac add <name>` | Add new account |
+| `ac remove <name>` | Remove account |
+| `ac rotate-token <name>` | Rotate account token |
+| `ac list` | List all accounts |
+| `ac status` | Show account status and quota |
+| `ac usage` | Detailed usage table |
 
-#### `ch add` flags
+#### `ac add` flags
 
 | Flag | Description | Default |
 |------|-------------|---------|
@@ -93,7 +93,7 @@ Each account gets:
 | `--label` | Display label | Capitalized name |
 | `--provider` | Provider type | `claude-code` |
 
-#### `ch remove` flags
+#### `ac remove` flags
 
 | Flag | Description |
 |------|-------------|
@@ -102,7 +102,7 @@ Each account gets:
 ### Launch
 
 ```bash
-ch launch <name> [dir] [flags]
+ac launch <name> [dir] [flags]
 ```
 
 | Flag | Description |
@@ -116,35 +116,35 @@ ch launch <name> [dir] [flags]
 
 | Command | Description |
 |---------|-------------|
-| `ch daemon start` | Start hub daemon (background) |
-| `ch daemon stop` | Stop the daemon |
-| `ch daemon status` | Check if daemon is running |
+| `ac daemon start` | Start agentctl daemon (background) |
+| `ac daemon stop` | Stop the daemon |
+| `ac daemon status` | Check if daemon is running |
 
 ### Configuration
 
 ```bash
-ch config set <dot.path> <value>
+ac config set <dot.path> <value>
 ```
 
 ```bash
-ch config set notifications.enabled true
-ch config set notifications.events.rateLimit false
-ch config set defaults.launchInNewWindow false
+ac config set notifications.enabled true
+ac config set notifications.events.rateLimit false
+ac config set defaults.launchInNewWindow false
 ```
 
 ### Help
 
 ```bash
-ch help              # overview of all commands
-ch help launch       # detailed help for a command
-ch help daemon
+ac help              # overview of all commands
+ac help launch       # detailed help for a command
+ac help daemon
 ```
 
 ---
 
 ## TUI Dashboard
 
-Run `ch` with no arguments to open the interactive dashboard.
+Run `ac` with no arguments to open the interactive dashboard.
 
 ### Views
 
@@ -172,10 +172,10 @@ Run `ch` with no arguments to open the interactive dashboard.
 
 ## MCP Tools
 
-The MCP bridge exposes 21 tools that AI agents can use to communicate with the hub. Start the bridge per-account:
+The MCP bridge exposes 21 tools that AI agents can use to communicate with agentctl. Start the bridge per-account:
 
 ```bash
-ch bridge --account work
+ac bridge --account work
 ```
 
 ### Messaging
@@ -249,8 +249,8 @@ The daemon is a Unix domain socket server that enables inter-account communicati
      └───────┬────────┴────────┬───────┘
              │                 │
         ┌────▼─────────────────▼────┐
-        │     Hub Daemon            │
-        │  ~/.claude-hub/hub.sock   │
+        │     agentctl Daemon       │
+        │  ~/.agentctl/hub.sock   │
         │                           │
         │  • Message routing        │
         │  • Task state             │
@@ -267,9 +267,9 @@ The daemon uses newline-delimited JSON over a Unix socket. The first message fro
 ### Start / Stop
 
 ```bash
-ch daemon start    # writes PID to ~/.claude-hub/daemon.pid
-ch daemon status   # checks if PID is alive + socket exists
-ch daemon stop     # sends SIGTERM to daemon PID
+ac daemon start    # writes PID to ~/.agentctl/daemon.pid
+ac daemon status   # checks if PID is alive + socket exists
+ac daemon stop     # sends SIGTERM to daemon PID
 ```
 
 ---
@@ -313,7 +313,7 @@ handoff_from_template  → loads template, merges with overrides, validates, and
 
 ## Workspace Isolation
 
-When the `workspaceWorktree` feature flag is enabled, the hub creates isolated git worktrees for each task.
+When the `workspaceWorktree` feature flag is enabled, agentctl creates isolated git worktrees for each task.
 
 ```
 repo/
@@ -334,7 +334,7 @@ repo/
 
 ## Capability Routing
 
-When the `capabilityRouting` feature flag is enabled, the hub scores accounts for task assignment.
+When the `capabilityRouting` feature flag is enabled, agentctl scores accounts for task assignment.
 
 ### Scoring Formula (100 points max)
 
@@ -386,7 +386,7 @@ Press `r` in the dashboard to browse the prompt library.
 
 ## Configuration
 
-Config file: `~/.claude-hub/config.json`
+Config file: `~/.agentctl/config.json`
 
 ```typescript
 {
@@ -438,17 +438,17 @@ Config file: `~/.claude-hub/config.json`
 
 | Path | Purpose |
 |------|---------|
-| `~/.claude-hub/config.json` | Hub configuration |
-| `~/.claude-hub/tokens/<name>.token` | Account auth tokens |
-| `~/.claude-hub/messages/` | Message store |
-| `~/.claude-hub/tasks.json` | Task board state |
-| `~/.claude-hub/daemon.pid` | Daemon PID file |
-| `~/.claude-hub/hub.sock` | Daemon Unix socket |
-| `~/.claude-hub/daemon.log` | Daemon log |
-| `~/.claude-hub/prompts.json` | Prompt library |
-| `~/.claude-hub/templates/` | Custom handoff templates |
+| `~/.agentctl/config.json` | agentctl configuration |
+| `~/.agentctl/tokens/<name>.token` | Account auth tokens |
+| `~/.agentctl/messages/` | Message store |
+| `~/.agentctl/tasks.json` | Task board state |
+| `~/.agentctl/daemon.pid` | Daemon PID file |
+| `~/.agentctl/hub.sock` | Daemon Unix socket |
+| `~/.agentctl/daemon.log` | Daemon log |
+| `~/.agentctl/prompts.json` | Prompt library |
+| `~/.agentctl/templates/` | Custom handoff templates |
 
-Override the base directory with `CLAUDE_HUB_DIR` environment variable.
+Override the base directory with `AGENTCTL_DIR` environment variable.
 
 ---
 
@@ -482,7 +482,7 @@ The terminal registry auto-detects the best available terminal for the current p
 
 ```
 ┌─────────────────────────────────────────────┐
-│                   CLI (ch)                  │
+│                   CLI (ac)                  │
 │          meow parser + command router       │
 ├─────────────────────────────────────────────┤
 │                  TUI (Ink)                  │
@@ -526,7 +526,7 @@ Test coverage includes: daemon protocol, MCP bridge, task lifecycle, handoff val
 ## Project Structure
 
 ```
-claude-hub/
+agentctl/
 ├── src/
 │   ├── cli.tsx                  # CLI entry point & command router
 │   ├── app.tsx                  # TUI root component

@@ -5,7 +5,7 @@ export function assertHomeDir(): string {
 }
 
 export function getHubDir(): string {
-  return process.env.CLAUDE_HUB_DIR ?? `${assertHomeDir()}/.claude-hub`;
+  return process.env.AGENTCTL_DIR ?? `${assertHomeDir()}/.agentctl`;
 }
 
 export function getSockPath(): string {

@@ -37,9 +37,9 @@ export function generateWorkspaceConfig(accounts: Array<{ name: string; color: s
     return `    { args = { "bash", "-c", "CLAUDE_CONFIG_DIR=${configDir} claude" }, set_environment_variables = { CLAUDE_CONFIG_DIR = "${configDir}" } }`;
   });
 
-  return `-- Claude Hub workspace preset
+  return `-- agentctl workspace preset
 local workspace = {
-  workspace_id = "claude-hub",
+  workspace_id = "agentctl",
   tabs = {
 ${panes.join(",\n")}
   }

@@ -30,7 +30,7 @@ export async function sendNotification(
 
   try {
     // Prefer terminal-notifier for proper app icon and clickable notifications
-    const args = ["-title", title, "-message", body, "-group", "claude-hub"];
+    const args = ["-title", title, "-message", body, "-group", "agentctl"];
     if (opts?.subtitle) args.push("-subtitle", opts.subtitle);
     if (opts?.sound) args.push("-sound", opts.sound);
     await Bun.$`terminal-notifier ${args}`.quiet();
@@ -69,7 +69,7 @@ function isMuted(from: string, config: NotificationConfig): boolean {
 export async function notifyRateLimit(accountName: string, config?: NotificationConfig): Promise<void> {
   const cfg = config ?? await loadNotificationConfig();
   if (!cfg.enabled || !cfg.events.rateLimit) return;
-  await sendNotification("Claude Hub", `${accountName} approaching rate limit`, {
+  await sendNotification("agentctl", `${accountName} approaching rate limit`, {
     subtitle: "⚠️ Rate Limit Warning",
     sound: "Pop",
   });
@@ -79,7 +79,7 @@ export async function notifyHandoff(from: string, _to: string, task: string, con
   const cfg = config ?? await loadNotificationConfig();
   if (!cfg.enabled || !cfg.events.handoffReceived) return;
   if (isMuted(from, cfg)) return;
-  await sendNotification("Claude Hub", task.slice(0, 120), {
+  await sendNotification("agentctl", task.slice(0, 120), {
     subtitle: `🔄 Handoff from ${from}`,
     sound: "Blow",
   });
@@ -89,7 +89,7 @@ export async function notifyMessage(from: string, _to: string, preview: string, 
   const cfg = config ?? await loadNotificationConfig();
   if (!cfg.enabled || !cfg.events.messageReceived) return;
   if (isMuted(from, cfg)) return;
-  await sendNotification("Claude Hub", preview.slice(0, 120), {
+  await sendNotification("agentctl", preview.slice(0, 120), {
     subtitle: `💬 Message from ${from}`,
     sound: "Pop",
   });

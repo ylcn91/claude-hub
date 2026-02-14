@@ -16,10 +16,10 @@ describe("count_unread handler", () => {
   let server: Server;
   let state: DaemonState;
   let sockPath: string;
-  const originalHubDir = process.env.CLAUDE_HUB_DIR;
+  const originalHubDir = process.env.AGENTCTL_DIR;
 
   beforeEach(() => {
-    process.env.CLAUDE_HUB_DIR = TEST_DIR;
+    process.env.AGENTCTL_DIR = TEST_DIR;
     mkdirSync(join(TEST_DIR, "tokens"), { recursive: true });
     writeFileSync(join(TEST_DIR, "tokens", "alice.token"), "alice-secret");
     writeFileSync(join(TEST_DIR, "tokens", "bob.token"), "bob-secret");
@@ -34,7 +34,7 @@ describe("count_unread handler", () => {
   });
 
   afterEach(() => {
-    process.env.CLAUDE_HUB_DIR = originalHubDir;
+    process.env.AGENTCTL_DIR = originalHubDir;
     try { state.close(); } catch {}
     try { stopDaemon(server, sockPath); } catch {}
     rmSync(TEST_DIR, { recursive: true, force: true });

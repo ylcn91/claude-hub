@@ -5,12 +5,12 @@ import { mkdirSync, rmSync } from "fs";
 const TEST_DIR = join(import.meta.dir, ".test-handoff-templates");
 
 beforeAll(() => {
-  process.env.CLAUDE_HUB_DIR = TEST_DIR;
+  process.env.AGENTCTL_DIR = TEST_DIR;
   mkdirSync(TEST_DIR, { recursive: true });
 });
 
 afterAll(() => {
-  delete process.env.CLAUDE_HUB_DIR;
+  delete process.env.AGENTCTL_DIR;
   rmSync(TEST_DIR, { recursive: true, force: true });
 });
 

@@ -20,7 +20,7 @@ const RECONNECT_MAX_DELAY_MS = 30_000;
 function getToken(account: string): string {
   const tokenPath = `${TOKENS_DIR}/${account}.token`;
   if (!existsSync(tokenPath)) {
-    throw new Error(`Token file not found for account '${account}'. Run 'ch add' to create the account first.`);
+    throw new Error(`Token file not found for account '${account}'. Run 'ac add' to create the account first.`);
   }
   return readFileSync(tokenPath, "utf-8").trim();
 }
@@ -195,7 +195,7 @@ export async function startBridge(account: string): Promise<void> {
 
   // Start MCP server on stdio
   const mcpServer = new McpServer(
-    { name: "claude-hub", version: "1.0.0" },
+    { name: "agentctl", version: "1.0.0" },
     { capabilities: { tools: {} } }
   );
 

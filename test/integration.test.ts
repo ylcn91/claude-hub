@@ -19,30 +19,30 @@ function uniqueDbPath(dir: string): string {
   return join(dir, `test-${++intDbCounter}-${Date.now()}.db`);
 }
 
-const origHubDir = process.env.CLAUDE_HUB_DIR;
+const origHubDir = process.env.AGENTCTL_DIR;
 
 beforeAll(() => {
-  process.env.CLAUDE_HUB_DIR = TEST_DIR;
+  process.env.AGENTCTL_DIR = TEST_DIR;
   mkdirSync(TEST_DIR, { recursive: true });
 });
 
 afterAll(() => {
-  process.env.CLAUDE_HUB_DIR = origHubDir;
+  process.env.AGENTCTL_DIR = origHubDir;
   rmSync(TEST_DIR, { recursive: true, force: true });
 });
 
 describe("CLI integration", () => {
-  test("ch --help shows usage", async () => {
-    const result = await $`bun ${CLI_PATH} --help`.env({ ...process.env, CLAUDE_HUB_DIR: TEST_DIR }).quiet().nothrow();
+  test("ac --help shows usage", async () => {
+    const result = await $`bun ${CLI_PATH} --help`.env({ ...process.env, AGENTCTL_DIR: TEST_DIR }).quiet().nothrow();
     const output = result.stdout.toString();
-    expect(output).toContain("Claude Hub");
-    expect(output).toContain("ch");
+    expect(output).toContain("agentctl");
+    expect(output).toContain("ac");
   });
 
   test("ch add creates account", async () => {
     const configDir = join(TEST_DIR, "accounts", "test-work");
     const result = await $`bun ${CLI_PATH} add test-work --dir ${configDir} --color '#89b4fa' --label Work`
-      .env({ ...process.env, CLAUDE_HUB_DIR: TEST_DIR })
+      .env({ ...process.env, AGENTCTL_DIR: TEST_DIR })
       .quiet()
       .nothrow();
 
@@ -61,7 +61,7 @@ describe("CLI integration", () => {
 
   test("ch list shows accounts", async () => {
     const result = await $`bun ${CLI_PATH} list`
-      .env({ ...process.env, CLAUDE_HUB_DIR: TEST_DIR })
+      .env({ ...process.env, AGENTCTL_DIR: TEST_DIR })
       .quiet()
       .nothrow();
     const output = result.stdout.toString();
@@ -71,7 +71,7 @@ describe("CLI integration", () => {
 
   test("ch status shows account status", async () => {
     const result = await $`bun ${CLI_PATH} status`
-      .env({ ...process.env, CLAUDE_HUB_DIR: TEST_DIR })
+      .env({ ...process.env, AGENTCTL_DIR: TEST_DIR })
       .quiet()
       .nothrow();
     const output = result.stdout.toString();
@@ -80,7 +80,7 @@ describe("CLI integration", () => {
 
   test("ch usage shows usage table", async () => {
     const result = await $`bun ${CLI_PATH} usage`
-      .env({ ...process.env, CLAUDE_HUB_DIR: TEST_DIR })
+      .env({ ...process.env, AGENTCTL_DIR: TEST_DIR })
       .quiet()
       .nothrow();
     const output = result.stdout.toString();
@@ -91,7 +91,7 @@ describe("CLI integration", () => {
 
   test("ch add rejects duplicate", async () => {
     const result = await $`bun ${CLI_PATH} add test-work --dir /tmp/dup --color '#ff0000' --label Dup`
-      .env({ ...process.env, CLAUDE_HUB_DIR: TEST_DIR })
+      .env({ ...process.env, AGENTCTL_DIR: TEST_DIR })
       .quiet()
       .nothrow();
     expect(result.exitCode).not.toBe(0);
@@ -101,7 +101,7 @@ describe("CLI integration", () => {
 
   test("ch remove removes account", async () => {
     const result = await $`bun ${CLI_PATH} remove test-work`
-      .env({ ...process.env, CLAUDE_HUB_DIR: TEST_DIR })
+      .env({ ...process.env, AGENTCTL_DIR: TEST_DIR })
       .quiet()
       .nothrow();
     const output = result.stdout.toString();
@@ -114,7 +114,7 @@ describe("CLI integration", () => {
 
   test("ch list shows no accounts after removal", async () => {
     const result = await $`bun ${CLI_PATH} list`
-      .env({ ...process.env, CLAUDE_HUB_DIR: TEST_DIR })
+      .env({ ...process.env, AGENTCTL_DIR: TEST_DIR })
       .quiet()
       .nothrow();
     const output = result.stdout.toString();
@@ -123,9 +123,9 @@ describe("CLI integration", () => {
 });
 
 describe("package.json", () => {
-  test("bin.ch points to cli.tsx", () => {
+  test("bin.ac points to cli.tsx", () => {
     const pkg = JSON.parse(readFileSync(join(import.meta.dir, "..", "package.json"), "utf-8"));
-    expect(pkg.bin?.ch).toBe("./src/cli.tsx");
+    expect(pkg.bin?.ac).toBe("./src/cli.tsx");
   });
 });
 
@@ -228,14 +228,14 @@ describe("daemon start/stop lifecycle", () => {
   let originalHubDir: string | undefined;
 
   beforeEach(() => {
-    originalHubDir = process.env.CLAUDE_HUB_DIR;
-    process.env.CLAUDE_HUB_DIR = daemonDir;
+    originalHubDir = process.env.AGENTCTL_DIR;
+    process.env.AGENTCTL_DIR = daemonDir;
     mkdirSync(join(daemonDir, "tokens"), { recursive: true });
     mkdirSync(join(daemonDir, "messages"), { recursive: true });
   });
 
   afterEach(() => {
-    process.env.CLAUDE_HUB_DIR = originalHubDir;
+    process.env.AGENTCTL_DIR = originalHubDir;
     try { if (daemonState) daemonState.close(); } catch {}
     try { if (server) stopDaemon(server); } catch {}
     rmSync(daemonDir, { recursive: true, force: true });
@@ -305,8 +305,8 @@ describe("bridge connect + message send/receive through daemon", () => {
   let originalHubDir: string | undefined;
 
   beforeEach(() => {
-    originalHubDir = process.env.CLAUDE_HUB_DIR;
-    process.env.CLAUDE_HUB_DIR = bridgeDir;
+    originalHubDir = process.env.AGENTCTL_DIR;
+    process.env.AGENTCTL_DIR = bridgeDir;
     mkdirSync(join(bridgeDir, "tokens"), { recursive: true });
     mkdirSync(join(bridgeDir, "messages"), { recursive: true });
 
@@ -320,7 +320,7 @@ describe("bridge connect + message send/receive through daemon", () => {
   });
 
   afterEach(() => {
-    process.env.CLAUDE_HUB_DIR = originalHubDir;
+    process.env.AGENTCTL_DIR = originalHubDir;
     try { state.close(); } catch {}
     try { stopDaemon(server); } catch {}
     rmSync(bridgeDir, { recursive: true, force: true });
@@ -508,8 +508,8 @@ describe("token auth: invalid token is rejected by daemon", () => {
   let originalHubDir: string | undefined;
 
   beforeEach(() => {
-    originalHubDir = process.env.CLAUDE_HUB_DIR;
-    process.env.CLAUDE_HUB_DIR = authDir;
+    originalHubDir = process.env.AGENTCTL_DIR;
+    process.env.AGENTCTL_DIR = authDir;
     mkdirSync(join(authDir, "tokens"), { recursive: true });
     mkdirSync(join(authDir, "messages"), { recursive: true });
     writeFileSync(join(authDir, "tokens", "valid-acct.token"), "correct-token");
@@ -520,7 +520,7 @@ describe("token auth: invalid token is rejected by daemon", () => {
   });
 
   afterEach(() => {
-    process.env.CLAUDE_HUB_DIR = originalHubDir;
+    process.env.AGENTCTL_DIR = originalHubDir;
     try { authState.close(); } catch {}
     try { stopDaemon(server); } catch {}
     rmSync(authDir, { recursive: true, force: true });

@@ -7,7 +7,7 @@ const TEST_DIR = join(import.meta.dir, ".test-config");
 const TEST_CONFIG = join(TEST_DIR, "config.json");
 
 // Override HUB_DIR for tests
-process.env.CLAUDE_HUB_DIR = TEST_DIR;
+process.env.AGENTCTL_DIR = TEST_DIR;
 
 beforeEach(() => {
   mkdirSync(TEST_DIR, { recursive: true });

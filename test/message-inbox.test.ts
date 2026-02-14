@@ -5,16 +5,16 @@ import { createServer, type Server } from "net";
 import { fetchUnreadMessages, fetchUnreadCounts } from "../src/services/daemon-client";
 
 const TEST_DIR = join(import.meta.dir, ".test-inbox");
-const origHubDir = process.env.CLAUDE_HUB_DIR;
+const origHubDir = process.env.AGENTCTL_DIR;
 
 beforeEach(() => {
-  process.env.CLAUDE_HUB_DIR = TEST_DIR;
+  process.env.AGENTCTL_DIR = TEST_DIR;
   mkdirSync(TEST_DIR, { recursive: true });
   mkdirSync(join(TEST_DIR, "tokens"), { recursive: true });
 });
 
 afterEach(() => {
-  process.env.CLAUDE_HUB_DIR = origHubDir;
+  process.env.AGENTCTL_DIR = origHubDir;
   rmSync(TEST_DIR, { recursive: true, force: true });
 });
 

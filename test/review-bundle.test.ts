@@ -8,7 +8,7 @@ import type { ReviewBundle } from "../src/services/review-bundle";
 const TEST_DIR = join(import.meta.dir, ".test-review-bundle");
 
 // Override HUB_DIR for tests
-process.env.CLAUDE_HUB_DIR = TEST_DIR;
+process.env.AGENTCTL_DIR = TEST_DIR;
 
 beforeEach(() => {
   mkdirSync(TEST_DIR, { recursive: true });

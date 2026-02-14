@@ -16,17 +16,17 @@ const TEST_TOKENS = join(TEST_DIR, "tokens");
 const TEST_ACCOUNTS_DIR = join(TEST_DIR, "accounts");
 
 // Point env to test dir so config/tokens go to isolated location
-const origHubDir = process.env.CLAUDE_HUB_DIR;
+const origHubDir = process.env.AGENTCTL_DIR;
 
 beforeEach(() => {
-  process.env.CLAUDE_HUB_DIR = TEST_DIR;
+  process.env.AGENTCTL_DIR = TEST_DIR;
   mkdirSync(TEST_DIR, { recursive: true });
   mkdirSync(TEST_TOKENS, { recursive: true });
   mkdirSync(TEST_ACCOUNTS_DIR, { recursive: true });
 });
 
 afterEach(() => {
-  process.env.CLAUDE_HUB_DIR = origHubDir;
+  process.env.AGENTCTL_DIR = origHubDir;
   rmSync(TEST_DIR, { recursive: true, force: true });
 });
 
@@ -133,8 +133,8 @@ describe("setupAccount", () => {
 
     const settings = JSON.parse(readFileSync(settingsPath, "utf-8"));
     expect(settings.mcpServers).toBeDefined();
-    expect(settings.mcpServers["claude-hub"]).toEqual({
-      command: "ch",
+    expect(settings.mcpServers["agentctl"]).toEqual({
+      command: "ac",
       args: ["bridge", "--account", "mcp-test"],
     });
   });
@@ -281,7 +281,7 @@ describe("addShellAlias", () => {
       expect(modified).toBe(true);
 
       const zshrc = readFileSync(join(TEST_DIR, ".zshrc"), "utf-8");
-      expect(zshrc).toContain("# claude-hub:work");
+      expect(zshrc).toContain("# agentctl:work");
       expect(zshrc).toContain('alias claude-work=');
     } finally {
       process.env.HOME = origHome;
@@ -298,7 +298,7 @@ describe("addShellAlias", () => {
       expect(modified).toBe(false);
 
       const zshrc = readFileSync(join(TEST_DIR, ".zshrc"), "utf-8");
-      const count = (zshrc.match(/# claude-hub:idem/g) || []).length;
+      const count = (zshrc.match(/# agentctl:idem/g) || []).length;
       expect(count).toBe(1);
     } finally {
       process.env.HOME = origHome;

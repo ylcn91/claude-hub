@@ -4,7 +4,7 @@ import { mkdirSync, rmSync } from "fs";
 import { join } from "path";
 
 const TEST_DIR = join(import.meta.dir, ".test-daemon");
-process.env.CLAUDE_HUB_DIR = TEST_DIR;
+process.env.AGENTCTL_DIR = TEST_DIR;
 
 let dbCounter = 0;
 function uniqueDbPath(): string {

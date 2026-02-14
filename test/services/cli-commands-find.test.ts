@@ -6,15 +6,15 @@ import { findCommand } from "../../src/services/cli-commands";
 const TEST_DIR = join(import.meta.dir, ".test-cli-find");
 const TEST_CONFIG = join(TEST_DIR, "config.json");
 
-const origHubDir = process.env.CLAUDE_HUB_DIR;
+const origHubDir = process.env.AGENTCTL_DIR;
 
 beforeEach(() => {
-  process.env.CLAUDE_HUB_DIR = TEST_DIR;
+  process.env.AGENTCTL_DIR = TEST_DIR;
   mkdirSync(TEST_DIR, { recursive: true });
 });
 
 afterEach(() => {
-  process.env.CLAUDE_HUB_DIR = origHubDir;
+  process.env.AGENTCTL_DIR = origHubDir;
   rmSync(TEST_DIR, { recursive: true, force: true });
 });
 

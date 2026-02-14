@@ -13,17 +13,17 @@ const TEST_CONFIG = join(TEST_DIR, "config.json");
 const TEST_TOKENS = join(TEST_DIR, "tokens");
 const TEST_ACCOUNTS_DIR = join(TEST_DIR, "accounts");
 
-const origHubDir = process.env.CLAUDE_HUB_DIR;
+const origHubDir = process.env.AGENTCTL_DIR;
 
 beforeEach(() => {
-  process.env.CLAUDE_HUB_DIR = TEST_DIR;
+  process.env.AGENTCTL_DIR = TEST_DIR;
   mkdirSync(TEST_DIR, { recursive: true });
   mkdirSync(TEST_TOKENS, { recursive: true });
   mkdirSync(TEST_ACCOUNTS_DIR, { recursive: true });
 });
 
 afterEach(() => {
-  process.env.CLAUDE_HUB_DIR = origHubDir;
+  process.env.AGENTCTL_DIR = origHubDir;
   rmSync(TEST_DIR, { recursive: true, force: true });
 });
 
@@ -81,8 +81,8 @@ describe("rotateToken", () => {
 
     // settings.json should now have the MCP config restored
     const settings = JSON.parse(readFileSync(settingsPath, "utf-8"));
-    expect(settings.mcpServers["claude-hub"]).toEqual({
-      command: "ch",
+    expect(settings.mcpServers["agentctl"]).toEqual({
+      command: "ac",
       args: ["bridge", "--account", "settings-test"],
     });
   });

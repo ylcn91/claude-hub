@@ -54,8 +54,8 @@ describe("WezTerm integration", () => {
       ];
       const config = generateWorkspaceConfig(accounts);
 
-      expect(config).toContain("-- Claude Hub workspace preset");
-      expect(config).toContain('workspace_id = "claude-hub"');
+      expect(config).toContain("-- agentctl workspace preset");
+      expect(config).toContain('workspace_id = "agentctl"');
       expect(config).toContain("tabs = {");
       expect(config).toContain("CLAUDE_CONFIG_DIR=/home/user/.claude claude");
     });

@@ -121,8 +121,8 @@ async function setupMCPConfig(configDir: string, accountName: string): Promise<v
   }
 
   if (!settings.mcpServers) settings.mcpServers = {};
-  settings.mcpServers["claude-hub"] = {
-    command: "ch",
+  settings.mcpServers["agentctl"] = {
+    command: "ac",
     args: ["bridge", "--account", accountName],
   };
 
@@ -193,7 +193,7 @@ export async function addShellAlias(
 ): Promise<{ modified: boolean; backupPath: string | null }> {
   const zshrcPath = `${assertHomeDir()}/.zshrc`;
   const aliasLine = `alias claude-${name}='CLAUDE_CONFIG_DIR="${configDir}" claude'`;
-  const marker = `# claude-hub:${name}`;
+  const marker = `# agentctl:${name}`;
 
   let content = "";
   if (existsSync(zshrcPath)) {

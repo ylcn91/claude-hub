@@ -14,7 +14,7 @@ import {
 let testDir: string;
 
 beforeEach(async () => {
-  testDir = await mkdtemp(join(tmpdir(), "claude-hub-test-"));
+  testDir = await mkdtemp(join(tmpdir(), "agentctl-test-"));
 });
 
 afterEach(async () => {

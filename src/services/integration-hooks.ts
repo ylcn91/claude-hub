@@ -44,14 +44,14 @@ export async function onTaskStatusChanged(
         if (link.type === "issue") {
           await closeIssue({ owner, repo, issueNumber: number });
         }
-        await comment({ owner, repo, issueNumber: number, body: "Task accepted in claude-hub" });
+        await comment({ owner, repo, issueNumber: number, body: "Task accepted in agentctl" });
       } else if (newStatus === "rejected") {
         const body = context?.reason
-          ? `Task rejected in claude-hub: ${context.reason}`
-          : "Task rejected in claude-hub";
+          ? `Task rejected in agentctl: ${context.reason}`
+          : "Task rejected in agentctl";
         await comment({ owner, repo, issueNumber: number, body });
       } else if (newStatus === "ready_for_review") {
-        await comment({ owner, repo, issueNumber: number, body: "Ready for review in claude-hub" });
+        await comment({ owner, repo, issueNumber: number, body: "Ready for review in agentctl" });
       }
     } catch (err) {
       console.error(`Failed to sync link ${link.id} for task ${taskId}:`, err);

@@ -15,12 +15,12 @@ function uniqueDbPath(): string {
 
 beforeEach(() => {
   mkdirSync(TEST_MESSAGES_DIR, { recursive: true });
-  process.env.CLAUDE_HUB_DIR = TEST_DIR;
+  process.env.AGENTCTL_DIR = TEST_DIR;
 });
 
 afterEach(() => {
   rmSync(TEST_DIR, { recursive: true, force: true });
-  delete process.env.CLAUDE_HUB_DIR;
+  delete process.env.AGENTCTL_DIR;
 });
 
 describe("handoff_task", () => {
@@ -101,7 +101,7 @@ describe("handoff_task", () => {
 
   test("registerTools includes handoff_task tool", () => {
     const mcpServer = new McpServer(
-      { name: "claude-hub-test", version: "1.0.0" },
+      { name: "agentctl-test", version: "1.0.0" },
       { capabilities: { tools: {} } }
     );
 

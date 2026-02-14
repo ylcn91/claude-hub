@@ -47,8 +47,8 @@ describe("notifications config round-trip", () => {
     };
     await saveConfig(config, oldPath);
 
-    const origDir = process.env.CLAUDE_HUB_DIR;
-    process.env.CLAUDE_HUB_DIR = TEST_DIR;
+    const origDir = process.env.AGENTCTL_DIR;
+    process.env.AGENTCTL_DIR = TEST_DIR;
 
     // Save with proper name for setConfigValue
     const setValConfigPath = join(TEST_DIR, "config.json");
@@ -61,7 +61,7 @@ describe("notifications config round-trip", () => {
     expect(reloaded.notifications).toBeDefined();
     expect(reloaded.notifications!.enabled).toBe(true);
 
-    process.env.CLAUDE_HUB_DIR = origDir;
+    process.env.AGENTCTL_DIR = origDir;
   });
 
   test("config without notifications loads cleanly", async () => {

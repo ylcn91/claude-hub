@@ -31,7 +31,7 @@ interface CommandHelp {
 
 const COMMANDS: Record<string, CommandHelp> = {
   add: {
-    usage: "ch add <name> [--dir DIR] [--color HEX] [--label LABEL] [--provider TYPE]",
+    usage: "ac add <name> [--dir DIR] [--color HEX] [--label LABEL] [--provider TYPE]",
     description: "Add a new Claude account with isolated config directory and shell alias.",
     options: [
       "--dir       Config directory (default: ~/.claude-<name>)",
@@ -40,19 +40,19 @@ const COMMANDS: Record<string, CommandHelp> = {
       "--provider  Provider type: claude-code, codex-cli, openhands, gemini-cli",
     ],
     examples: [
-      "ch add work",
-      "ch add codex --provider codex-cli",
-      'ch add review --color "#f38ba8" --label "Code Review"',
+      "ac add work",
+      "ac add codex --provider codex-cli",
+      'ac add review --color "#f38ba8" --label "Code Review"',
     ],
   },
   remove: {
-    usage: "ch remove <name> [--purge]",
-    description: "Remove an account from Claude Hub.",
+    usage: "ac remove <name> [--purge]",
+    description: "Remove an account from agentctl.",
     options: ["--purge  Also delete the config directory on disk"],
-    examples: ["ch remove work", "ch remove old-account --purge"],
+    examples: ["ac remove work", "ac remove old-account --purge"],
   },
   launch: {
-    usage: "ch launch <name> [dir] [--resume] [--no-window] [--bypass-permissions] [--no-entire]",
+    usage: "ac launch <name> [dir] [--resume] [--no-window] [--bypass-permissions] [--no-entire]",
     description:
       "Quick-launch a Claude account in a new terminal window with isolated environment.",
     options: [
@@ -62,167 +62,167 @@ const COMMANDS: Record<string, CommandHelp> = {
       "--no-entire           Skip auto-enabling entire monitoring",
     ],
     examples: [
-      "ch launch work",
-      "ch launch work ~/projects/my-app",
-      "ch launch work --resume",
-      "ch launch work --no-window  # prints the command to run manually",
+      "ac launch work",
+      "ac launch work ~/projects/my-app",
+      "ac launch work --resume",
+      "ac launch work --no-window  # prints the command to run manually",
     ],
   },
   daemon: {
-    usage: "ch daemon <start|stop|status>",
+    usage: "ac daemon <start|stop|status>",
     description:
-      "Manage the Claude Hub daemon. The daemon enables inter-account communication via MCP bridge (handoffs, messages, task updates).",
+      "Manage the agentctl daemon. The daemon enables inter-account communication via MCP bridge (handoffs, messages, task updates).",
     examples: [
-      "ch daemon start   # start in background",
-      "ch daemon status  # check if running",
-      "ch daemon stop    # stop the daemon",
+      "ac daemon start   # start in background",
+      "ac daemon status  # check if running",
+      "ac daemon stop    # stop the daemon",
     ],
   },
   bridge: {
-    usage: "ch bridge --account <name>",
+    usage: "ac bridge --account <name>",
     description:
       "Start MCP bridge for a specific account. This is typically launched automatically by the daemon — you rarely need to run it manually.",
-    examples: ["ch bridge --account work"],
+    examples: ["ac bridge --account work"],
   },
   status: {
-    usage: "ch status",
+    usage: "ac status",
     description: "Show a quick overview of all accounts: message counts and quota usage.",
-    examples: ["ch status"],
+    examples: ["ac status"],
   },
   usage: {
-    usage: "ch usage",
+    usage: "ac usage",
     description: "Show detailed usage table with today's activity, total messages, and quota per account.",
-    examples: ["ch usage"],
+    examples: ["ac usage"],
   },
   list: {
-    usage: "ch list",
+    usage: "ac list",
     description: "List all configured accounts with their colors, labels, and config directories.",
-    examples: ["ch list"],
+    examples: ["ac list"],
   },
   find: {
-    usage: "ch find <pattern>",
+    usage: "ac find <pattern>",
     description: "Search accounts by name, label, color, or provider.",
     examples: [
-      "ch find work",
-      "ch find claude-code",
-      'ch find "#f38ba8"',
+      "ac find work",
+      "ac find claude-code",
+      'ac find "#f38ba8"',
     ],
   },
   search: {
-    usage: "ch search <pattern>",
+    usage: "ac search <pattern>",
     description: "Search for a pattern across all account working directories using ripgrep.",
     examples: [
-      "ch search TODO",
-      "ch search 'function\\s+main'",
+      "ac search TODO",
+      "ac search 'function\\s+main'",
     ],
   },
   health: {
-    usage: "ch health [account]",
+    usage: "ac health [account]",
     description: "Show health status of all accounts or a specific account.",
     examples: [
-      "ch health",
-      "ch health work",
+      "ac health",
+      "ac health work",
     ],
   },
   replay: {
-    usage: "ch replay <session-id> [--json]",
+    usage: "ac replay <session-id> [--json]",
     description:
       "Replay an entire.io checkpoint session. Shows a timeline of prompts, responses, and tool calls from the checkpoint transcript.",
     options: ["--json  Output raw JSON instead of formatted timeline"],
     examples: [
-      "ch replay a3b2c4d5e6f7",
-      "ch replay a3b2c4d5e6f7 --json",
+      "ac replay a3b2c4d5e6f7",
+      "ac replay a3b2c4d5e6f7 --json",
     ],
   },
   "session name": {
-    usage: "ch session name <session-id> <name>",
+    usage: "ac session name <session-id> <name>",
     description: "Assign a human-readable name to a session for easier lookup and search.",
     examples: [
-      'ch session name abc123 "Deploy Pipeline Fix"',
-      'ch session name def456 "Login Bug Investigation"',
+      'ac session name abc123 "Deploy Pipeline Fix"',
+      'ac session name def456 "Login Bug Investigation"',
     ],
   },
   sessions: {
-    usage: "ch sessions [--search QUERY]",
+    usage: "ac sessions [--search QUERY]",
     description: "List all named sessions, or search sessions by name, tags, or notes.",
     options: [
       "--search  Search sessions by keyword across names, tags, and notes",
     ],
     examples: [
-      "ch sessions",
-      'ch sessions --search "deploy"',
-      'ch sessions --search kubernetes',
+      "ac sessions",
+      'ac sessions --search "deploy"',
+      'ac sessions --search kubernetes',
     ],
   },
   config: {
-    usage: "ch config <set|reload> [args]",
+    usage: "ac config <set|reload> [args]",
     description: "Update hub configuration values or reload configuration in the running daemon.",
     examples: [
-      'ch config set notifications.enabled true',
-      'ch config set notifications.events.rateLimit false',
-      'ch config reload  # reload config in the running daemon',
+      'ac config set notifications.enabled true',
+      'ac config set notifications.events.rateLimit false',
+      'ac config reload  # reload config in the running daemon',
     ],
   },
   "rotate-token": {
-    usage: "ch rotate-token <name>",
+    usage: "ac rotate-token <name>",
     description: "Generate a new token for an account, invalidating the old one.",
-    examples: ["ch rotate-token work"],
+    examples: ["ac rotate-token work"],
   },
   help: {
-    usage: "ch help [command]",
-    description: "Show help for Claude Hub or a specific command.",
-    examples: ["ch help", "ch help launch", "ch help daemon"],
+    usage: "ac help [command]",
+    description: "Show help for agentctl or a specific command.",
+    examples: ["ac help", "ac help launch", "ac help daemon"],
   },
 };
 
 function overview(): string {
   const mascot = coloredMascot();
-  const title = chalk.bold("Claude Hub (ch)") + " — Multi-account AI agent manager\n";
+  const title = chalk.bold("agentctl (ac)") + " — Multi-account AI agent manager\n";
 
   const sections = [
     {
       header: "Getting Started",
       cmds: [
-        ["ch", "Open the TUI dashboard"],
-        ["ch add <name>", "Add a new account"],
-        ["ch launch <name>", "Launch account in a new terminal"],
-        ["ch daemon start", "Start inter-account communication"],
+        ["ac", "Open the TUI dashboard"],
+        ["ac add <name>", "Add a new account"],
+        ["ac launch <name>", "Launch account in a new terminal"],
+        ["ac daemon start", "Start inter-account communication"],
       ],
     },
     {
       header: "Account Management",
       cmds: [
-        ["ch list", "List all accounts"],
-        ["ch find <pattern>", "Search accounts"],
-        ["ch status", "Show account status & quota"],
-        ["ch usage", "Detailed usage table"],
-        ["ch remove <name>", "Remove an account"],
-        ["ch rotate-token <name>", "Rotate account token"],
+        ["ac list", "List all accounts"],
+        ["ac find <pattern>", "Search accounts"],
+        ["ac status", "Show account status & quota"],
+        ["ac usage", "Detailed usage table"],
+        ["ac remove <name>", "Remove an account"],
+        ["ac rotate-token <name>", "Rotate account token"],
       ],
     },
     {
       header: "Search & Monitoring",
       cmds: [
-        ["ch search <pattern>", "Search code across accounts"],
-        ["ch health [account]", "Account health dashboard"],
-        ["ch replay <session-id>", "Replay entire.io checkpoint"],
-        ["ch sessions [--search Q]", "List or search named sessions"],
-        ["ch session name <id> <name>", "Name a session"],
+        ["ac search <pattern>", "Search code across accounts"],
+        ["ac health [account]", "Account health dashboard"],
+        ["ac replay <session-id>", "Replay entire.io checkpoint"],
+        ["ac sessions [--search Q]", "List or search named sessions"],
+        ["ac session name <id> <name>", "Name a session"],
       ],
     },
     {
       header: "Daemon & Communication",
       cmds: [
-        ["ch daemon start|stop|status", "Manage the hub daemon"],
-        ["ch bridge --account <name>", "MCP bridge (internal)"],
+        ["ac daemon start|stop|status", "Manage the hub daemon"],
+        ["ac bridge --account <name>", "MCP bridge (internal)"],
       ],
     },
     {
       header: "Configuration",
       cmds: [
-        ["ch config set <key> <val>", "Update config value"],
-        ["ch config reload", "Reload config in running daemon"],
-        ["ch help [command]", "Show help"],
+        ["ac config set <key> <val>", "Update config value"],
+        ["ac config reload", "Reload config in running daemon"],
+        ["ac help [command]", "Show help"],
       ],
     },
   ];
@@ -238,7 +238,7 @@ function overview(): string {
     .join("\n\n");
 
   const tui = chalk.gray(
-    "\n  Run " + chalk.white("ch") + " with no arguments to open the interactive TUI.\n" +
+    "\n  Run " + chalk.white("ac") + " with no arguments to open the interactive TUI.\n" +
     "  TUI views: [d]ashboard [l]auncher [u]sage [a]dd [t]asks [m]ail [e]scalation [r]prompts [n]analytics [h]ealth  [Esc] back  [q] quit"
   );
 

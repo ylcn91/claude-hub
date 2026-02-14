@@ -5,7 +5,7 @@ import { join } from "path";
 const TEST_DIR = join(import.meta.dir, ".test-external-links");
 
 beforeEach(() => {
-  process.env.CLAUDE_HUB_DIR = TEST_DIR;
+  process.env.AGENTCTL_DIR = TEST_DIR;
   mkdirSync(TEST_DIR, { recursive: true });
 });
 
@@ -14,7 +14,7 @@ afterEach(async () => {
   const { _resetStore } = await import("../src/services/external-links");
   _resetStore();
   rmSync(TEST_DIR, { recursive: true, force: true });
-  delete process.env.CLAUDE_HUB_DIR;
+  delete process.env.AGENTCTL_DIR;
 });
 
 describe("external-links service", () => {

@@ -4,7 +4,7 @@ import { mkdirSync, rmSync } from "fs";
 import { join } from "path";
 
 const TEST_DIR = join(import.meta.dir, ".test-clipboard");
-process.env.CLAUDE_HUB_DIR = TEST_DIR;
+process.env.AGENTCTL_DIR = TEST_DIR;
 
 beforeEach(() => mkdirSync(TEST_DIR, { recursive: true }));
 afterEach(() => rmSync(TEST_DIR, { recursive: true, force: true }));
