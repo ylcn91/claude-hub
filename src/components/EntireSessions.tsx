@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from "react";
+import { useState, useEffect, useContext } from "react";
 import { Box, Text, useInput } from "ink";
+import { NavContext } from "../app.js";
 import { existsSync, readdirSync, readFileSync } from "fs";
 import { join } from "path";
 import type { EntireSessionMetrics, EntirePhase, EntireTokenUsage } from "../services/entire-adapter.js";
@@ -126,6 +127,11 @@ export function EntireSessions({ onNavigate }: Props) {
   const [loading, setLoading] = useState(true);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [refreshTick, setRefreshTick] = useState(0);
+  const { refreshTick: globalRefresh } = useContext(NavContext);
+
+  useEffect(() => {
+    if (globalRefresh > 0) setRefreshTick((prev) => prev + 1);
+  }, [globalRefresh]);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -146,9 +152,9 @@ export function EntireSessions({ onNavigate }: Props) {
   }, [refreshTick]);
 
   useInput((input, key) => {
-    if (key.upArrow) {
+    if (key.upArrow || input === "k") {
       setSelectedIndex((i) => Math.max(0, i - 1));
-    } else if (key.downArrow) {
+    } else if (key.downArrow || input === "j") {
       setSelectedIndex((i) => Math.min(sessions.length - 1, i + 1));
     } else if (input === "r") {
       setRefreshTick((prev) => prev + 1);

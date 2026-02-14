@@ -24,7 +24,7 @@ interface Props {
   accounts?: string[];
 }
 
-type Mode = "browse" | "add" | "assign" | "reject" | "justify";
+type Mode = "browse" | "add" | "assign" | "reject" | "justify" | "search";
 
 const STATUS_ORDER: TaskStatus[] = ["todo", "in_progress", "ready_for_review", "accepted", "rejected"];
 const STATUS_COLORS: Record<TaskStatus, string> = {
@@ -51,6 +51,7 @@ export function TaskBoard({ onNavigate, accounts = [] }: Props) {
   const [assignIndex, setAssignIndex] = useState(0);
   const [sortByPrio, setSortByPrio] = useState(false);
   const [frictionMessage, setFrictionMessage] = useState<{ text: string; color: string } | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
 
   const { setGlobalNavEnabled } = useContext(NavContext);
 
@@ -72,7 +73,17 @@ export function TaskBoard({ onNavigate, accounts = [] }: Props) {
 
   // Flat list for navigation: pending, then in-progress, then done
   const rawTasks = STATUS_ORDER.flatMap((s) => tasksByStatus(s));
-  const flatTasks = sortByPrio ? sortByPriority(rawTasks) : rawTasks;
+  const searchedTasks = searchQuery
+    ? rawTasks.filter((t) => {
+        const q = searchQuery.toLowerCase();
+        return (
+          t.title.toLowerCase().includes(q) ||
+          (t.assignee ?? "").toLowerCase().includes(q) ||
+          (t.tags ?? []).some((tag) => tag.toLowerCase().includes(q))
+        );
+      })
+    : rawTasks;
+  const flatTasks = sortByPrio ? sortByPriority(searchedTasks) : searchedTasks;
 
   async function persist(newBoard: TaskBoardData) {
     setBoard(newBoard);
@@ -104,6 +115,20 @@ export function TaskBoard({ onNavigate, accounts = [] }: Props) {
   }
 
   useInput((input, key) => {
+    // Search mode
+    if (mode === "search") {
+      if (key.return || key.escape) {
+        if (key.escape) setSearchQuery("");
+        setMode("browse");
+        setSelectedIndex(0);
+      } else if (key.backspace || key.delete) {
+        setSearchQuery((q) => q.slice(0, -1));
+      } else if (input && !key.ctrl && !key.meta) {
+        setSearchQuery((q) => q + input);
+      }
+      return;
+    }
+
     // All text-input modes share identical key handling
     if (mode === "add" || mode === "reject" || mode === "justify") {
       if (key.return) {
@@ -142,10 +167,12 @@ export function TaskBoard({ onNavigate, accounts = [] }: Props) {
     }
 
     // Browse mode
-    if (key.upArrow) {
+    if (key.upArrow || input === "k") {
       setSelectedIndex((i) => Math.max(0, i - 1));
-    } else if (key.downArrow) {
+    } else if (key.downArrow || input === "j") {
       setSelectedIndex((i) => Math.min(flatTasks.length - 1, i + 1));
+    } else if (input === "/") {
+      setMode("search");
     } else if (input === "a") {
       setMode("add");
     } else if (key.return && flatTasks[selectedIndex]) {
@@ -216,6 +243,18 @@ export function TaskBoard({ onNavigate, accounts = [] }: Props) {
       }
     } else if (input === "p") {
       setSortByPrio((prev) => !prev);
+    } else if (input === "s" && key.ctrl) {
+      // Ctrl+s: explicit save
+      persist(board);
+      setFrictionMessage({ text: "Saved", color: "green" });
+      setTimeout(() => setFrictionMessage(null), 2000);
+    } else if (input === "r" && key.ctrl) {
+      // Ctrl+r: reload tasks
+      loadTasks().then((b) => {
+        setBoard(b);
+        setFrictionMessage({ text: "Refreshed", color: "cyan" });
+        setTimeout(() => setFrictionMessage(null), 2000);
+      });
     } else if (key.escape) {
       onNavigate("dashboard");
     }
@@ -228,8 +267,17 @@ export function TaskBoard({ onNavigate, accounts = [] }: Props) {
       <Box marginBottom={1}>
         <Text bold>Task Board</Text>
         {sortByPrio && <Text color="yellow"> (sorted by priority)</Text>}
-        <Text color="gray">  [a]dd [s]tatus [v]accept [x]reject [p]riority [Enter]assign [d]elete [Esc]back</Text>
+        {searchQuery && <Text color="cyan"> filter: "{searchQuery}"</Text>}
+        <Text color="gray">  [/]search [a]dd [s]tatus [v]accept [x]reject [p]riority [Enter]assign [d]elete [Esc]back</Text>
       </Box>
+
+      {mode === "search" && (
+        <Box marginBottom={1}>
+          <Text color="cyan">Search: </Text>
+          <Text>{searchQuery}</Text>
+          <Text color="gray">_</Text>
+        </Box>
+      )}
 
       {mode === "add" && (
         <Box marginBottom={1}>

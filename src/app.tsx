@@ -1,6 +1,8 @@
-import { useState, useEffect, createContext } from "react";
+import { useState, useEffect, useCallback, createContext } from "react";
 import { Box, useInput } from "ink";
 import { loadConfig } from "./config.js";
+import { atomicRead, atomicWrite } from "./services/file-store.js";
+import { getTuiStatePath } from "./paths.js";
 import { Header } from "./components/Header.js";
 import { Dashboard } from "./components/Dashboard.js";
 import { Launcher } from "./components/Launcher.js";
@@ -19,6 +21,11 @@ import { VerificationView } from "./components/VerificationView.js";
 import { EntireSessions } from "./components/EntireSessions.js";
 import { DelegationChain } from "./components/DelegationChain.js";
 import { HelpOverlay } from "./components/HelpOverlay.js";
+import { StatusBar } from "./components/StatusBar.js";
+
+interface TuiState {
+  lastView?: string;
+}
 
 export const NAV_KEYS: Record<string, string> = {
   d: "dashboard",
@@ -40,16 +47,35 @@ export const NAV_KEYS: Record<string, string> = {
 
 export const NavContext = createContext<{
   setGlobalNavEnabled: (enabled: boolean) => void;
-}>({ setGlobalNavEnabled: () => {} });
+  refreshTick: number;
+}>({ setGlobalNavEnabled: () => {}, refreshTick: 0 });
 
 export function App() {
-  const [view, setView] = useState("dashboard");
+  const [view, setViewRaw] = useState("dashboard");
   const [viewDetail, setViewDetail] = useState<any>(null);
   const [accountNames, setAccountNames] = useState<string[]>([]);
   const [globalNavEnabled, setGlobalNavEnabled] = useState(true);
   const [showHelp, setShowHelp] = useState(false);
+  const [refreshTick, setRefreshTick] = useState(0);
 
+  // Wrap setView to persist last view
+  const setView = useCallback((v: string) => {
+    setViewRaw(v);
+    atomicWrite(getTuiStatePath(), { lastView: v } as TuiState).catch(() => {});
+  }, []);
+
+  // Load persisted view on startup
   useEffect(() => {
+    atomicRead<TuiState>(getTuiStatePath()).then((state) => {
+      if (state?.lastView) {
+        const validViews = new Set(Object.values(NAV_KEYS));
+        validViews.add("dashboard");
+        if (validViews.has(state.lastView)) {
+          setViewRaw(state.lastView);
+        }
+      }
+    }).catch(() => {});
+
     loadConfig().then((config) => {
       setAccountNames(config.accounts.map((a) => a.name));
     }).catch(e => console.error("[app]", e.message));
@@ -60,13 +86,20 @@ export function App() {
     if (input === "?") { setShowHelp(prev => !prev); return; }
     if (input === "q") process.exit(0);
     if (key.escape) { setView("dashboard"); setGlobalNavEnabled(true); setShowHelp(false); return; }
+
+    // Ctrl+r: global refresh
+    if (input === "r" && key.ctrl) {
+      setRefreshTick((t) => t + 1);
+      return;
+    }
+
     if (!globalNavEnabled) return;
     const target = NAV_KEYS[input];
     if (target && target !== view) setView(target);
   });
 
   return (
-    <NavContext.Provider value={{ setGlobalNavEnabled }}>
+    <NavContext.Provider value={{ setGlobalNavEnabled, refreshTick }}>
       <Box flexDirection="column">
         <Header view={view} showMascot={view === "dashboard"} globalNavEnabled={globalNavEnabled} />
         <HelpOverlay view={view} visible={showHelp} />
@@ -86,6 +119,7 @@ export function App() {
         {view === "verify" && <VerificationView onNavigate={setView} />}
         {view === "entire" && <EntireSessions onNavigate={setView} />}
         {view === "chains" && <DelegationChain onNavigate={setView} />}
+        <StatusBar />
       </Box>
     </NavContext.Provider>
   );

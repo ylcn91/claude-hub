@@ -68,9 +68,9 @@ export function WorkflowBoard({ onNavigate }: Props) {
   const items = tab === "definitions" ? definitions : runs;
 
   useInput((input, key) => {
-    if (key.upArrow) {
+    if (key.upArrow || input === "k") {
       setSelectedIndex((i) => Math.max(0, i - 1));
-    } else if (key.downArrow) {
+    } else if (key.downArrow || input === "j") {
       setSelectedIndex((i) => Math.min(items.length - 1, i + 1));
     } else if (input === "1") {
       setTab("definitions");

@@ -2,7 +2,7 @@ import { useState, useEffect, useContext } from "react";
 import { Box, Text, useInput } from "ink";
 import { NavContext } from "../app.js";
 import { loadTasks } from "../services/tasks.js";
-import { checkStaleTasks, humanTime, formatEscalationMessage, DEFAULT_SLA_CONFIG, type Escalation, type AdaptiveEscalation, type EntireTriggerType } from "../services/sla-engine.js";
+import { checkStaleTasks, humanTime, DEFAULT_SLA_CONFIG, type Escalation, type AdaptiveEscalation, type EntireTriggerType } from "../services/sla-engine.js";
 import { useListNavigation } from "../hooks/useListNavigation.js";
 
 const REFRESH_INTERVAL_MS = 30_000;
@@ -51,12 +51,17 @@ export function SLABoard({ onNavigate }: Props) {
     enabled: true,
   });
 
-  const { setGlobalNavEnabled } = useContext(NavContext);
+  const { setGlobalNavEnabled, refreshTick: globalRefresh } = useContext(NavContext);
 
   useEffect(() => {
     setGlobalNavEnabled(false);
     return () => setGlobalNavEnabled(true);
   }, []);
+
+  // Respond to global Ctrl+r refresh
+  useEffect(() => {
+    if (globalRefresh > 0) setRefreshTick((prev) => prev + 1);
+  }, [globalRefresh]);
 
   // Auto-refresh polling
   useEffect(() => {

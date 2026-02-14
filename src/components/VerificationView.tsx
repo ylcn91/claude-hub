@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from "react";
+import { useState, useEffect, useContext } from "react";
 import { Box, Text, useInput } from "ink";
+import { NavContext } from "../app.js";
 import { atomicRead } from "../services/file-store.js";
 import { getHubDir } from "../paths.js";
 import type { VerificationVerdict, VerificationResult } from "../services/verification-council.js";
@@ -40,6 +41,11 @@ export function VerificationView({ onNavigate }: Props) {
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [detailView, setDetailView] = useState(false);
   const [refreshTick, setRefreshTick] = useState(0);
+  const { refreshTick: globalRefresh } = useContext(NavContext);
+
+  useEffect(() => {
+    if (globalRefresh > 0) setRefreshTick((prev) => prev + 1);
+  }, [globalRefresh]);
 
   useEffect(() => {
     async function load() {
@@ -58,9 +64,9 @@ export function VerificationView({ onNavigate }: Props) {
   }, [refreshTick]);
 
   useInput((input, key) => {
-    if (key.upArrow) {
+    if (key.upArrow || input === "k") {
       setSelectedIndex((i) => Math.max(0, i - 1));
-    } else if (key.downArrow) {
+    } else if (key.downArrow || input === "j") {
       const max = detailView
         ? (results[selectedIndex]?.individualReviews.length ?? 1) - 1
         : results.length - 1;

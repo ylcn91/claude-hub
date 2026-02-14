@@ -9,6 +9,10 @@
 
 # agentctl
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Runtime: Bun](https://img.shields.io/badge/Runtime-Bun-f9f1e1.svg)](https://bun.sh)
+[![Platform: macOS | Linux](https://img.shields.io/badge/Platform-macOS%20%7C%20Linux-lightgrey.svg)]()
+
 **Multi-account AI agent manager** — run multiple Claude Code, Codex CLI, OpenHands, and Gemini CLI accounts from a single TUI dashboard with inter-agent messaging, task handoff, SLA monitoring, and capability-based routing.
 
 ```
@@ -17,6 +21,30 @@ actl add work                 # add a new account
 actl launch work ~/project    # open in a new terminal
 actl daemon start             # enable inter-agent communication
 ```
+
+---
+
+## Install
+
+### Homebrew (macOS & Linux)
+
+```bash
+brew tap ylcn91/agentctl
+brew install agentctl
+```
+
+### From Source
+
+```bash
+git clone https://github.com/ylcn91/agentctl.git
+cd agentctl
+bun install
+bun link    # registers `actl` and `agentctl` globally
+```
+
+### Standalone Binary
+
+Pre-built binaries for macOS (arm64, x64) and Linux (x64) are attached to each [GitHub Release](https://github.com/ylcn91/agentctl/releases).
 
 ---
 
@@ -30,12 +58,30 @@ actl daemon start             # enable inter-agent communication
 - **Workspace isolation** — git worktree-based workspaces so agents work on isolated branches
 - **Capability routing** — score and rank accounts by skill match, success rate, speed, and recency
 - **SLA monitoring** — detect stale tasks and escalate with ping, reassign, or escalate actions
+- **Adaptive SLA** — graduated responses based on task criticality and progress
 - **Prompt library** — save, search, and reuse prompts across accounts
 - **Handoff templates** — reusable task handoff contracts (built-in and custom)
 - **Notifications** — OS-native notifications for rate limits, handoffs, and messages
 - **Multi-provider** — Claude Code, Codex CLI, OpenHands, Gemini CLI, OpenCode, Cursor Agent
 - **Multi-terminal** — WezTerm, iTerm2, GNOME Terminal, Windows Terminal
-- **MCP bridge** — 55 MCP tools for AI agents to interact with agentctl programmatically
+- **MCP bridge** — 56 MCP tools for AI agents to interact with agentctl programmatically
+- **GitHub integration** — link tasks to issues/PRs with status sync
+- **Review bundles** — auto-generate diff summaries, test results, and risk notes for review
+- **Knowledge index** — full-text search across prompts, handoffs, decisions, and notes
+- **Analytics** — cycle times, accept/reject ratios, per-account productivity, SLA violations
+- **Live session sharing** — pair-programming sessions between accounts with real-time updates
+- **Session naming** — name, tag, and search sessions for future reference
+- **Multi-model council** — pre-delegation task analysis using multiple LLMs via OpenRouter
+- **Council verification** — multi-LLM review of completed work against acceptance criteria
+- **Trust & reputation** — track agent completion rate, SLA compliance, and quality metrics
+- **Progress tracking** — agents report intermediate progress for proactive monitoring
+- **Workflow automation** — YAML-based DAG workflows with steps, conditions, and retries
+- **Retrospectives** — AI-powered post-session retrospectives with learnings
+- **Delegation chains** — track delegation depth to prevent accountability vacuums
+- **Cross-account code search** — search for patterns across all account working directories
+- **Circuit breaker** — failure handling for agent reliability
+- **Daemon supervisor** — auto-restart and health watchdog for the daemon process
+- **Session replay** — replay Entire checkpoint transcripts with timeline visualization
 
 ---
 
@@ -85,6 +131,7 @@ Each account gets:
 | `actl list` | List all accounts |
 | `actl status` | Show account status and quota |
 | `actl usage` | Detailed usage table |
+| `actl find <pattern>` | Find accounts by name, label, color, or provider |
 
 #### `actl add` flags
 
@@ -121,17 +168,48 @@ actl launch <name> [dir] [flags]
 | `actl daemon start` | Start agentctl daemon (background) |
 | `actl daemon stop` | Stop the daemon |
 | `actl daemon status` | Check if daemon is running |
+| `actl daemon supervise` | Start daemon with auto-restart supervisor |
+
+### Search
+
+| Command | Description |
+|---------|-------------|
+| `actl search <pattern>` | Search for a pattern across all account working directories |
+| `actl find <pattern>` | Find accounts matching a pattern |
+
+### Health
+
+```bash
+actl health [account]        # show health status for all or a specific account
+```
+
+### Sessions
+
+| Command | Description |
+|---------|-------------|
+| `actl sessions` | List all named sessions |
+| `actl sessions --search <query>` | Search sessions by name |
+| `actl session name <id> <name>` | Name or rename a session |
+
+### Replay
+
+```bash
+actl replay <session-id>          # replay Entire checkpoint transcript
+actl replay <session-id> --json   # output as JSON
+```
 
 ### Configuration
 
 ```bash
 actl config set <dot.path> <value>
+actl config reload                    # hot-reload config via daemon
 ```
 
 ```bash
 actl config set notifications.enabled true
 actl config set notifications.events.rateLimit false
 actl config set defaults.launchInNewWindow false
+actl config set features.council true
 ```
 
 ### Help
@@ -182,7 +260,7 @@ Run `actl` with no arguments to open the interactive dashboard.
 
 ## MCP Tools
 
-The MCP bridge exposes 55 tools that AI agents can use to communicate with agentctl. Start the bridge per-account:
+The MCP bridge exposes 56 tools that AI agents can use to communicate with agentctl. Start the bridge per-account:
 
 ```bash
 actl bridge --account work
@@ -209,7 +287,7 @@ actl bridge --account work
 
 | Tool | Description |
 |------|-------------|
-| `handoff_task` | Hand off a task with structured contract |
+| `handoff_task` | Hand off a task with structured contract (supports enriched characteristics) |
 | `accept_handoff` | Accept a pending handoff (auto-creates workspace) |
 | `update_task_status` | Update task status following lifecycle rules |
 
@@ -220,6 +298,7 @@ actl bridge --account work
 | `handoff_from_template` | Create handoff from a saved template |
 | `list_handoff_templates` | List all available templates |
 | `save_handoff_template` | Save a new template for reuse |
+| `list_handoff_types` | List all template types with descriptions and defaults |
 
 ### Workspace
 
@@ -235,6 +314,44 @@ actl bridge --account work
 |------|-------------|
 | `suggest_assignee` | Capability-based routing recommendations |
 | `check_sla` | Check for stale tasks violating SLA thresholds |
+| `check_adaptive_sla` | Adaptive SLA with graduated responses (ping, reassign, quarantine, escalate) |
+
+### Intelligent Delegation
+
+| Tool | Description |
+|------|-------------|
+| `report_progress` | Report intermediate task progress for proactive monitoring |
+| `analyze_task` | Multi-model council analysis before delegation |
+| `get_trust_scores` | Trust and reputation scores for agents |
+| `verify_task` | Multi-LLM council verification of completed work |
+
+### GitHub Integration
+
+| Tool | Description |
+|------|-------------|
+| `link_to_github` | Link a task to a GitHub issue or PR |
+| `get_task_links` | Get all external links for a task |
+| `sync_github_status` | Get current status of a linked GitHub issue |
+
+### Review Bundles
+
+| Tool | Description |
+|------|-------------|
+| `get_review_bundle` | Get review bundle for a task (diff, tests, risks) |
+| `generate_review_bundle` | Generate review bundle with git diff analysis and risk assessment |
+
+### Knowledge Index
+
+| Tool | Description |
+|------|-------------|
+| `search_knowledge` | Full-text search across prompts, handoffs, events, and notes |
+| `index_note` | Index a note or decision for future search |
+
+### Analytics
+
+| Tool | Description |
+|------|-------------|
+| `get_analytics` | Operational analytics: cycle times, ratios, productivity, SLA violations |
 
 ### Prompt Library
 
@@ -243,6 +360,52 @@ actl bridge --account work
 | `save_prompt` | Save a prompt with tags |
 | `list_prompts` | List or search prompts |
 | `use_prompt` | Retrieve a prompt by ID (increments usage count) |
+
+### Workflow Automation
+
+| Tool | Description |
+|------|-------------|
+| `trigger_workflow` | Trigger a workflow by name |
+| `workflow_status` | Get status of a workflow run |
+| `list_workflows` | List all workflow definitions |
+| `cancel_workflow` | Cancel a running workflow |
+
+### Retrospectives
+
+| Tool | Description |
+|------|-------------|
+| `start_retro` | Start a retrospective session for a workflow run |
+| `submit_retro_review` | Submit a review for an active retro session |
+| `submit_retro_synthesis` | Submit final synthesized retro document |
+| `retro_status` | Get retro session status and document |
+| `get_past_learnings` | Get learnings from past retrospectives |
+
+### Live Session Sharing
+
+| Tool | Description |
+|------|-------------|
+| `share_session` | Start a pair-programming session with another account |
+| `join_session` | Join a live session |
+| `session_broadcast` | Send updates to the other participant |
+| `session_status` | Check session status |
+| `session_history` | Get recent session updates |
+| `leave_session` | End participation in a session |
+
+### Session Management
+
+| Tool | Description |
+|------|-------------|
+| `name_session` | Name or rename a session with tags and notes |
+| `list_named_sessions` | List named sessions (filterable by account) |
+| `search_sessions` | Full-text search across named sessions |
+
+### Health & Search
+
+| Tool | Description |
+|------|-------------|
+| `daemon_health` | Daemon health: uptime, connections, memory, store status |
+| `check_account_health` | Account health: connection, activity, errors, rate limits |
+| `search_across_accounts` | Search for patterns across all account working directories |
 
 ---
 
@@ -267,6 +430,10 @@ The daemon is a Unix domain socket server that enables inter-account communicati
         │  • Workspace management   │
         │  • Capability store       │
         │  • SLA timer              │
+        │  • Trust store            │
+        │  • Knowledge index        │
+        │  • Session sharing        │
+        │  • Config hot-reload      │
         └───────────────────────────┘
 ```
 
@@ -277,9 +444,10 @@ The daemon uses newline-delimited JSON over a Unix socket. The first message fro
 ### Start / Stop
 
 ```bash
-actl daemon start    # writes PID to ~/.agentctl/daemon.pid
-actl daemon status   # checks if PID is alive + socket exists
-actl daemon stop     # sends SIGTERM to daemon PID
+actl daemon start      # writes PID to ~/.agentctl/daemon.pid
+actl daemon status     # checks if PID is alive + socket exists
+actl daemon stop       # sends SIGTERM to daemon PID
+actl daemon supervise  # start with auto-restart supervisor + watchdog
 ```
 
 ---
@@ -305,6 +473,22 @@ todo → in_progress → ready_for_review → accepted
 ```
 
 Optional context: `branch`, `projectDir`, `notes`.
+
+### Enriched Task Characteristics
+
+Handoffs support enriched metadata for intelligent delegation:
+
+| Field | Values | Description |
+|-------|--------|-------------|
+| `complexity` | low, medium, high, critical | Task complexity level |
+| `criticality` | low, medium, high, critical | How critical the task is |
+| `uncertainty` | low, medium, high | Requirement uncertainty |
+| `estimated_duration_minutes` | number | Estimated duration |
+| `verifiability` | auto-testable, needs-review, subjective | How to verify the outcome |
+| `reversibility` | reversible, partial, irreversible | Can changes be reverted? |
+| `required_skills` | string[] | Skills needed |
+| `autonomy_level` | strict, standard, open-ended | Delegatee autonomy |
+| `monitoring_level` | outcome-only, periodic, continuous | Monitoring frequency |
 
 ### Auto-Acceptance
 
@@ -376,6 +560,10 @@ Check interval: every 60 seconds.
 
 Use `check_sla` to manually trigger a check and get escalation recommendations.
 
+### Adaptive SLA
+
+The `check_adaptive_sla` tool provides graduated responses based on task criticality and progress: ping, reassign, quarantine, or escalate. Agents report progress via `report_progress` to enable behind-schedule detection.
+
 ---
 
 ## Prompt Library
@@ -434,6 +622,10 @@ When the `council` feature flag is enabled, agentctl can analyze tasks using mul
 3. Models rank each other's responses
 4. Chairman model synthesizes consensus
 
+### Council Verification
+
+The `verify_task` tool runs multi-LLM council verification on completed work. Multiple models independently review the diff against the goal and acceptance criteria, then a chairman produces a final verdict: ACCEPT, REJECT, or ACCEPT_WITH_NOTES.
+
 ### Configuration
 
 ```json
@@ -448,7 +640,75 @@ When the `council` feature flag is enabled, agentctl can analyze tasks using mul
 
 ### TUI
 
-Press `c` in the dashboard to access the Council panel.
+Press `c` in the dashboard to access the Council panel. Press `v` for verification receipts.
+
+---
+
+## Live Session Sharing
+
+When the `sessions` feature flag is enabled, accounts can start pair-programming sessions with real-time updates.
+
+### How It Works
+
+1. Account A starts a session with `share_session` targeting Account B
+2. Account B joins with `join_session`
+3. Both participants exchange updates via `session_broadcast`
+4. Either can leave with `leave_session`
+
+### Session Naming
+
+Sessions can be named, tagged, and searched for easy reference:
+- `name_session` — assign a human-readable name and tags
+- `list_named_sessions` — list sessions, filterable by account
+- `search_sessions` — full-text search across session names, tags, and notes
+
+### CLI
+
+```bash
+actl sessions                      # list all named sessions
+actl sessions --search "auth"      # search sessions
+actl session name <id> "Auth Fix"  # name a session
+```
+
+---
+
+## GitHub Integration
+
+When the `githubIntegration` feature flag is enabled, tasks can be linked to GitHub issues and PRs.
+
+### MCP Tools
+
+- **`link_to_github`** — link a task to an issue or PR
+- **`get_task_links`** — get all external links for a task
+- **`sync_github_status`** — check the current status of a linked issue
+
+---
+
+## Review Bundles
+
+When the `reviewBundles` feature flag is enabled, agentctl can auto-generate comprehensive review bundles for tasks.
+
+### What's Included
+
+- Git diff summary (files changed, insertions, deletions)
+- Test execution results
+- Risk assessment notes
+
+### MCP Tools
+
+- **`generate_review_bundle`** — generate a bundle from a branch diff
+- **`get_review_bundle`** — retrieve a saved bundle for a task
+
+---
+
+## Knowledge Index
+
+When the `knowledgeIndex` feature flag is enabled, agentctl maintains a full-text search index across prompts, handoffs, task events, and decision notes.
+
+### MCP Tools
+
+- **`search_knowledge`** — search by query, optionally filtered by category
+- **`index_note`** — index a note or decision for future search
 
 ---
 
@@ -480,7 +740,12 @@ When the `entireMonitoring` feature flag is enabled, agentctl monitors account h
 - Average response time
 - Session success rate
 
-### TUI
+### CLI & TUI
+
+```bash
+actl health            # show health for all accounts
+actl health <name>     # show health for one account
+```
 
 Press `h` in the dashboard to view health dashboard.
 
@@ -522,6 +787,14 @@ When the `entireMonitoring` feature flag is enabled, agentctl integrates with Cl
 - Track active Entire sessions per account
 - Session metadata: tokens, duration, files modified
 - Retro evidence collection for post-session reviews
+- Session replay with timeline visualization
+
+### CLI
+
+```bash
+actl replay <session-id>          # replay a checkpoint transcript
+actl replay <session-id> --json   # output as JSON
+```
 
 ### TUI
 
@@ -566,6 +839,10 @@ Config file: `~/.agentctl/config.json`
     autoAcceptance?: true,
     capabilityRouting?: true,
     slaEngine?: true,
+    githubIntegration?: true,
+    reviewBundles?: true,
+    knowledgeIndex?: true,
+    reliability?: true,
     workflow?: true,
     retro?: true,
     sessions?: true,
@@ -574,6 +851,19 @@ Config file: `~/.agentctl/config.json`
     circuitBreaker?: true,
     cognitiveFriction?: true,
     entireMonitoring?: true
+  },
+  github?: {
+    enabled: true,
+    defaultOwner: "your-org",
+    defaultRepo: "your-repo"
+  },
+  council?: {
+    models: ["anthropic/claude-3.5-sonnet", "google/gemini-2.0-flash"],
+    chairman: "anthropic/claude-3.5-sonnet",
+    apiKey: "your-openrouter-key"
+  },
+  delegationDepth?: {
+    maxDepth: 3
   },
   defaults: {
     launchInNewWindow: true,
@@ -654,10 +944,13 @@ The terminal registry auto-detects the best available terminal for the current p
 │               Service Layer                 │
 │  account-manager │ tasks │ handoff │ sla    │
 │  capabilities │ workspace │ prompts │ notif │
+│  council │ trust │ analytics │ workflows    │
+│  knowledge │ review-bundles │ retros        │
 ├─────────────────────────────────────────────┤
 │              Infrastructure                 │
 │  daemon (Unix socket) │ MCP bridge │ store  │
 │  providers │ terminals │ file-store         │
+│  supervisor │ watchdog │ session-store      │
 └─────────────────────────────────────────────┘
 ```
 
@@ -666,24 +959,39 @@ Built with:
 - **TUI** — [Ink](https://github.com/vadimdemedes/ink) (React for CLIs)
 - **CLI** — [meow](https://github.com/sindresorhus/meow)
 - **MCP** — [@modelcontextprotocol/sdk](https://github.com/modelcontextprotocol/sdk)
+- **Validation** — [Zod](https://github.com/colinhacks/zod)
 - **Styling** — [Chalk](https://github.com/chalk/chalk)
+- **Workflows** — [yaml](https://github.com/eemeli/yaml) (YAML parsing)
 
 ---
 
 ## Testing
 
 ```bash
-bun test                     # run all tests
+bun test                     # run all 86 test files
 bun test test/               # unit tests
 bun test tests/              # integration tests
 bun test test/daemon.test.ts # single file
 ```
 
-Test coverage includes: daemon protocol, MCP bridge, task lifecycle, handoff validation, SLA engine, capability routing, workspace management, provider interface, terminal profiles, config migration, prompt library, and TUI components.
+Test coverage includes: daemon protocol, MCP bridge, task lifecycle, handoff validation, SLA engine, adaptive SLA, capability routing, workspace management, provider interface, terminal profiles, config migration, prompt library, council, trust scoring, progress tracking, delegation chains, circuit breaker, cognitive friction, review bundles, knowledge index, analytics, workflow engine, retro engine, GitHub integration, session sharing, verification council, event bus, and TUI components.
 
 ---
 
-## Project Structure
+## Development
+
+### Prerequisites
+
+- [Bun](https://bun.sh) v1.0+
+- macOS or Linux
+
+### Building
+
+```bash
+bun build --compile src/cli.tsx --outfile dist/actl
+```
+
+### Project Structure
 
 ```
 agentctl/
@@ -692,80 +1000,111 @@ agentctl/
 │   ├── app.tsx                  # TUI root component
 │   ├── config.ts                # Config loader/saver/migrator
 │   ├── types.ts                 # Shared types & constants
+│   ├── paths.ts                 # All file path computation
 │   ├── application/
 │   │   └── use-cases/           # Launch, dashboard, usage use-cases
 │   ├── components/
-│   │   ├── Dashboard.tsx          # Account cards view
-│   │   ├── TaskBoard.tsx           # Task kanban board
-│   │   ├── MessageInbox.tsx        # Message inbox
-│   │   ├── SLABoard.tsx            # SLA violation board
-│   │   ├── PromptLibrary.tsx       # Prompt browser
-│   │   ├── Launcher.tsx            # Quick-launch panel
-│   │   ├── Analytics.tsx           # Usage analytics
-│   │   ├── WorkflowBoard.tsx       # Workflow execution board
-│   │   ├── WorkflowDetail.tsx      # Workflow run details
-│   │   ├── HealthDashboard.tsx     # Account health monitoring
-│   │   ├── CouncilPanel.tsx        # Multi-model analysis
-│   │   ├── VerificationView.tsx     # Task verification receipts
-│   │   ├── EntireSessions.tsx      # Claude Enterprise sessions
-│   │   ├── DelegationChain.tsx      # Delegation chain tracking
-│   │   └── ...                      # Header, AddAccount, UsageDetail, etc.
+│   │   ├── Dashboard.tsx         # Account cards view
+│   │   ├── TaskBoard.tsx          # Task kanban board
+│   │   ├── MessageInbox.tsx       # Message inbox
+│   │   ├── SLABoard.tsx           # SLA violation board
+│   │   ├── PromptLibrary.tsx      # Prompt browser
+│   │   ├── Launcher.tsx           # Quick-launch panel
+│   │   ├── Analytics.tsx          # Usage analytics
+│   │   ├── WorkflowBoard.tsx      # Workflow execution board
+│   │   ├── WorkflowDetail.tsx     # Workflow run details
+│   │   ├── HealthDashboard.tsx    # Account health monitoring
+│   │   ├── CouncilPanel.tsx       # Multi-model analysis
+│   │   ├── VerificationView.tsx   # Task verification receipts
+│   │   ├── EntireSessions.tsx     # Claude Enterprise sessions
+│   │   ├── DelegationChain.tsx    # Delegation chain tracking
+│   │   └── HelpOverlay.tsx        # Keyboard shortcut help
 │   ├── daemon/
-│   │   ├── server.ts              # Unix socket daemon
-│   │   ├── state.ts               # In-memory daemon state
-│   │   ├── framing.ts             # Newline-delimited JSON framing
-│   │   ├── health-monitor.ts      # Account health monitoring
-│   │   ├── health.ts              # Health status reporting
-│   │   ├── workspace-manager.ts   # Git worktree operations
-│   │   ├── workspace-store.ts     # Workspace persistence
-│   │   ├── capability-store.ts     # Account capability persistence
-│   │   ├── message-store.ts       # Message persistence
-│   │   └── auto-launcher.ts       # Auto-launch logic
+│   │   ├── server.ts             # Unix socket daemon
+│   │   ├── state.ts              # In-memory daemon state
+│   │   ├── framing.ts            # Newline-delimited JSON framing
+│   │   ├── supervisor.ts         # Daemon auto-restart supervisor
+│   │   ├── watchdog.ts           # Health watchdog
+│   │   ├── config-watcher.ts     # Config hot-reload
+│   │   ├── health-monitor.ts     # Account health monitoring
+│   │   ├── health.ts             # Health status reporting
+│   │   ├── workspace-manager.ts  # Git worktree operations
+│   │   ├── workspace-store.ts    # Workspace persistence
+│   │   ├── capability-store.ts   # Account capability persistence
+│   │   ├── message-store.ts      # Message persistence
+│   │   ├── knowledge-store.ts    # Knowledge index persistence
+│   │   ├── session-store.ts      # Named session persistence
+│   │   ├── shared-session.ts     # Live session sharing
+│   │   ├── trust-store.ts        # Trust & reputation store
+│   │   ├── base-store.ts         # Base store abstraction
+│   │   └── auto-launcher.ts      # Auto-launch logic
 │   ├── mcp/
-│   │   ├── bridge.ts            # MCP server ↔ daemon bridge
-│   │   └── tools.ts             # 55 MCP tool registrations
+│   │   ├── bridge.ts             # MCP server ↔ daemon bridge
+│   │   └── tools.ts              # 56 MCP tool registrations
+│   ├── integrations/
+│   │   ├── github.ts             # GitHub issue/PR integration
+│   │   └── wezterm.ts            # WezTerm integration
 │   ├── providers/
-│   │   ├── claude-code.ts       # Claude Code provider
-│   │   ├── codex-cli.ts         # Codex CLI provider
-│   │   ├── openhands.ts         # OpenHands provider
-│   │   ├── gemini-cli.ts        # Gemini CLI provider
-│   │   ├── opencode.ts          # OpenCode provider
-│   │   ├── cursor-agent.ts      # Cursor Agent provider
-│   │   └── registry.ts          # Provider registry
+│   │   ├── claude-code.ts        # Claude Code provider
+│   │   ├── codex-cli.ts          # Codex CLI provider
+│   │   ├── openhands.ts          # OpenHands provider
+│   │   ├── gemini-cli.ts         # Gemini CLI provider
+│   │   ├── opencode.ts           # OpenCode provider
+│   │   ├── cursor-agent.ts       # Cursor Agent provider
+│   │   └── registry.ts           # Provider registry
 │   ├── services/
-│   │   ├── account-manager.ts     # Account CRUD + shell aliases
-│   │   ├── tasks.ts                # Task board + lifecycle transitions
-│   │   ├── handoff.ts              # Handoff payload validation
-│   │   ├── handoff-templates.ts    # Template CRUD
-│   │   ├── sla-engine.ts           # SLA threshold checks
+│   │   ├── account-manager.ts    # Account CRUD + shell aliases
+│   │   ├── tasks.ts              # Task board + lifecycle transitions
+│   │   ├── handoff.ts            # Handoff payload validation
+│   │   ├── handoff-templates.ts  # Template CRUD
+│   │   ├── sla-engine.ts         # SLA threshold checks
+│   │   ├── adaptive-coordinator.ts # Adaptive SLA with graduated responses
 │   │   ├── account-capabilities.ts # Capability scoring
-│   │   ├── workspace.ts             # Workspace types + validation
-│   │   ├── prompt-library.ts        # Prompt CRUD + search
-│   │   ├── notifications.ts         # OS notification dispatch
-│   │   ├── clipboard.ts             # Shared clipboard
-│   │   ├── workflow-engine.ts       # YAML workflow execution
-│   │   ├── workflow-parser.ts       # Workflow YAML parsing
-│   │   ├── workflow-store.ts         # Workflow state persistence
-│   │   ├── retro-engine.ts          # Post-session retrospectives
-│   │   ├── retro-store.ts           # Retro document storage
-│   │   ├── council.ts               # Multi-model analysis
-│   │   ├── council-config.ts        # Council configuration
-│   │   ├── health-monitor.ts        # Account health tracking
-│   │   ├── delegation-depth.ts       # Delegation chain tracking
-│   │   ├── circuit-breaker.ts        # Failure handling
-│   │   ├── cognitive-friction.ts     # Task difficulty tracking
-│   │   ├── entire-integration.ts     # Claude Enterprise integration
-│   │   ├── entire-adapter.ts        # Entire session adapter
-│   │   └── ...                       # file-store, cli-commands, help, etc.
+│   │   ├── workspace.ts          # Workspace types + validation
+│   │   ├── prompt-library.ts     # Prompt CRUD + search
+│   │   ├── notifications.ts      # OS notification dispatch
+│   │   ├── clipboard.ts          # Shared clipboard
+│   │   ├── workflow-engine.ts    # YAML workflow execution
+│   │   ├── workflow-parser.ts    # Workflow YAML parsing
+│   │   ├── workflow-store.ts     # Workflow state persistence
+│   │   ├── retro-engine.ts       # Post-session retrospectives
+│   │   ├── retro-store.ts        # Retro document storage
+│   │   ├── council.ts            # Multi-model analysis
+│   │   ├── council-config.ts     # Council configuration
+│   │   ├── verification-council.ts # Multi-LLM task verification
+│   │   ├── verification-receipts.ts # Verification receipt storage
+│   │   ├── progress-tracker.ts   # Task progress tracking
+│   │   ├── provider-profiles.ts  # Provider capability profiles
+│   │   ├── delegation-depth.ts   # Delegation chain tracking
+│   │   ├── circuit-breaker.ts    # Failure handling
+│   │   ├── cognitive-friction.ts # Task difficulty tracking
+│   │   ├── analytics.ts          # Operational analytics
+│   │   ├── knowledge-indexer.ts  # Knowledge base indexing
+│   │   ├── review-bundle.ts      # Review bundle generation
+│   │   ├── code-search.ts        # Cross-account code search
+│   │   ├── replay.ts             # Session replay timeline
+│   │   ├── entire-integration.ts # Claude Enterprise integration
+│   │   ├── entire-adapter.ts     # Entire session adapter
+│   │   ├── external-links.ts     # GitHub/external link management
+│   │   ├── event-bus.ts          # Internal event bus
+│   │   ├── input-sanitizer.ts    # Input validation & sanitization
+│   │   ├── file-store.ts         # Atomic JSON persistence
+│   │   ├── cli-commands.ts       # CLI command implementations
+│   │   └── help.ts               # Help text generation
 │   └── terminals/
-│       ├── wezterm.ts           # WezTerm profile
-│       ├── iterm.ts             # iTerm2 profile
-│       ├── gnome.ts             # GNOME Terminal profile
-│       ├── windows-terminal.ts  # Windows Terminal profile
-│       └── registry.ts          # Terminal auto-detection
-├── test/                        # Unit tests
-├── tests/                       # Integration tests
-├── docs/plans/                  # Roadmap & sprint plans
-├── index.ts                     # Entry point
+│       ├── wezterm.ts            # WezTerm profile
+│       ├── iterm.ts              # iTerm2 profile
+│       ├── gnome.ts              # GNOME Terminal profile
+│       ├── windows-terminal.ts   # Windows Terminal profile
+│       └── registry.ts           # Terminal auto-detection
+├── test/                         # 86 test files
+├── docs/plans/                   # Roadmap & sprint plans
+├── index.ts                      # Entry point
 └── package.json
 ```
+
+---
+
+## License
+
+[MIT](LICENSE)

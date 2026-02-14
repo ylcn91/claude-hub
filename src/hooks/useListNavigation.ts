@@ -18,12 +18,12 @@ interface UseListNavigationResult {
 export function useListNavigation({ itemCount, windowSize, enabled = true }: UseListNavigationOptions): UseListNavigationResult {
   const [selectedIndex, setSelectedIndex] = useState(0);
 
-  useInput((_input, key) => {
+  useInput((input, key) => {
     if (!enabled) return;
-    if (key.upArrow) {
+    if (key.upArrow || input === "k") {
       setSelectedIndex((prev) => Math.max(0, prev - 1));
     }
-    if (key.downArrow) {
+    if (key.downArrow || input === "j") {
       setSelectedIndex((prev) => Math.min(itemCount - 1, prev + 1));
     }
   });

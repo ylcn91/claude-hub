@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from "react";
+import { useState, useEffect, useContext } from "react";
 import { Box, Text, useInput } from "ink";
+import { NavContext } from "../app.js";
 import type { AccountHealth } from "../daemon/health-monitor.js";
 import { createConnection } from "net";
 import { readFileSync, existsSync } from "fs";
@@ -112,6 +113,11 @@ export function HealthDashboard({ onNavigate }: Props) {
   const [loading, setLoading] = useState(true);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [refreshTick, setRefreshTick] = useState(0);
+  const { refreshTick: globalRefresh } = useContext(NavContext);
+
+  useEffect(() => {
+    if (globalRefresh > 0) setRefreshTick((prev) => prev + 1);
+  }, [globalRefresh]);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -135,9 +141,9 @@ export function HealthDashboard({ onNavigate }: Props) {
   }, [refreshTick]);
 
   useInput((input, key) => {
-    if (key.upArrow) {
+    if (key.upArrow || input === "k") {
       setSelectedIndex((i) => Math.max(0, i - 1));
-    } else if (key.downArrow) {
+    } else if (key.downArrow || input === "j") {
       setSelectedIndex((i) => Math.min(statuses.length - 1, i + 1));
     } else if (input === "r") {
       setRefreshTick((prev) => prev + 1);

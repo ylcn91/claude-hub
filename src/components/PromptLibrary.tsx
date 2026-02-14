@@ -95,9 +95,9 @@ export function PromptLibrary({ onNavigate }: Props) {
     }
 
     // Browse mode
-    if (key.upArrow) {
+    if (key.upArrow || input === "k") {
       setSelectedIndex((i) => Math.max(0, i - 1));
-    } else if (key.downArrow) {
+    } else if (key.downArrow || input === "j") {
       setSelectedIndex((i) => Math.min(prompts.length - 1, i + 1));
     } else if (input === "/" || input === "s") {
       setMode("search");

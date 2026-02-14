@@ -1,8 +1,9 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useContext } from "react";
 import { Box, Text } from "ink";
 import { AccountCard } from "./AccountCard.js";
 import { loadDashboardData, type DashboardAccountData } from "../application/use-cases/load-dashboard-data.js";
 import { useListNavigation } from "../hooks/useListNavigation.js";
+import { NavContext } from "../app.js";
 
 const REFRESH_INTERVAL_MS = 30_000;
 
@@ -15,10 +16,17 @@ export function Dashboard() {
   const [pairedSessions, setPairedSessions] = useState<Map<string, string>>(new Map());
   const [refreshTick, setRefreshTick] = useState(0);
 
+  const { refreshTick: globalRefresh } = useContext(NavContext);
+
   const { selectedIndex, visibleRange, aboveCount, belowCount } = useListNavigation({
     itemCount: accounts.length,
     windowSize: 8,
   });
+
+  // Respond to global Ctrl+r refresh
+  useEffect(() => {
+    if (globalRefresh > 0) setRefreshTick((prev) => prev + 1);
+  }, [globalRefresh]);
 
   // Auto-refresh polling
   useEffect(() => {

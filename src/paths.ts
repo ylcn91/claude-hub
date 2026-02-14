@@ -91,3 +91,7 @@ export function getTrustDbPath(): string {
 export function getReceiptKeyPath(): string {
   return `${getHubDir()}/receipt.key`;
 }
+
+export function getTuiStatePath(): string {
+  return `${getHubDir()}/tui-state.json`;
+}
