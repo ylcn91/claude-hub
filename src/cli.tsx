@@ -21,6 +21,7 @@ const cli = meow(
     $ actl usage              Show usage table
     $ actl list               List accounts
     $ actl replay <session-id> Replay entire.io checkpoint
+    $ actl tdd <test-file>    Start TDD workflow session
 
   Options
     --account  Account name (for bridge mode)
@@ -51,6 +52,7 @@ const cli = meow(
       provider: { type: "string" },
       json: { type: "boolean", default: false },
       search: { type: "string" },
+      watch: { type: "boolean", default: false },
     },
   }
 );
@@ -94,20 +96,26 @@ if (command === "daemon" && subcommand === "start") {
     console.error("Usage: actl add <name>");
     process.exit(1);
   }
+  const { AddAccountArgsSchema } = await import("./daemon/schemas.js");
+  const validation = AddAccountArgsSchema.safeParse({
+    name,
+    color: cli.flags.color || undefined,
+    provider: cli.flags.provider || undefined,
+  });
+  if (!validation.success) {
+    for (const issue of validation.error.issues) {
+      console.error(`Invalid ${issue.path.join(".")}: ${issue.message}`);
+    }
+    process.exit(1);
+  }
   const { setupAccount, addShellAlias, CATPPUCCIN_COLORS } = await import("./services/account-manager.js");
-  const { PROVIDER_IDS } = await import("./types.js");
   const dir = cli.flags.dir ?? `~/.claude-${name}`;
   const color = cli.flags.color ?? CATPPUCCIN_COLORS[0].hex;
   const label = cli.flags.label ?? name.charAt(0).toUpperCase() + name.slice(1);
-  const providerFlag = cli.flags.provider;
-  if (providerFlag && !PROVIDER_IDS.includes(providerFlag as any)) {
-    console.error(`Invalid provider: ${providerFlag}. Valid: ${PROVIDER_IDS.join(", ")}`);
-    process.exit(1);
-  }
   try {
-    const { account, tokenPath } = await setupAccount({
+    const { tokenPath } = await setupAccount({
       name, configDir: dir, color, label,
-      provider: (providerFlag as any) ?? "claude-code",
+      provider: validation.data.provider ?? "claude-code",
     });
     console.log(`Account '${name}' created.`);
     console.log(`  Config dir: ${dir}`);
@@ -207,7 +215,7 @@ if (command === "daemon" && subcommand === "start") {
   try {
     const result = await new Promise<{ reloaded: boolean; accounts: number }>((resolve, reject) => {
       const timeout = setTimeout(() => {
-        try { socket.destroy(); } catch {}
+        try { socket.destroy(); } catch { /* socket already destroyed or errored */ }
         reject(new Error("Daemon did not respond within 2s"));
       }, 2000);
 
@@ -343,6 +351,38 @@ if (command === "daemon" && subcommand === "start") {
     }
   } finally {
     store.close();
+  }
+} else if (command === "tdd") {
+  const testFile = subcommand;
+  if (!testFile) {
+    console.error("Usage: actl tdd <test-file> [--watch]");
+    process.exit(1);
+  }
+  const { existsSync } = await import("fs");
+  if (!existsSync(testFile)) {
+    console.error(`Test file not found: ${testFile}`);
+    process.exit(1);
+  }
+  const { TddEngine } = await import("./services/tdd-engine.js");
+  const engine = new TddEngine({
+    testFile,
+    watchMode: cli.flags.watch,
+    onStateChange: (state) => {
+      const phase = state.phase.toUpperCase();
+      const last = state.lastTestPassed ? "PASS" : "FAIL";
+      process.stdout.write(`\r[${phase}] ${last} - cycles: ${state.cycles.filter((c) => c.phase === "red").length}  `);
+    },
+  });
+  engine.start();
+  const result = await engine.runTests();
+  engine.advanceAfterTests(result.passed);
+  console.log(`\n${result.output}`);
+  if (!cli.flags.watch) {
+    engine.stop();
+  } else {
+    console.log("Watching for changes... (Ctrl+C to stop)");
+    process.on("SIGINT", () => { engine.stop(); process.exit(0); });
+    process.on("SIGTERM", () => { engine.stop(); process.exit(0); });
   }
 } else if (command === "help") {
   const { showHelp } = await import("./services/help.js");

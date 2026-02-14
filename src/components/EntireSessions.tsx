@@ -2,7 +2,8 @@ import { useState, useEffect, useContext } from "react";
 import { Box, Text, useInput } from "ink";
 import { NavContext } from "../app.js";
 import { useTheme } from "../themes/index.js";
-import { existsSync, readdirSync, readFileSync } from "fs";
+import { existsSync } from "fs";
+import { readdir } from "node:fs/promises";
 import { join } from "path";
 import type { EntireSessionMetrics, EntirePhase, EntireTokenUsage } from "../services/entire-adapter.js";
 
@@ -69,17 +70,17 @@ function findSessionsDir(): string | null {
   return null;
 }
 
-function loadAllSessionMetrics(): EntireSessionMetrics[] {
+async function loadAllSessionMetrics(): Promise<EntireSessionMetrics[]> {
   const sessionsDir = findSessionsDir();
   if (!sessionsDir) return [];
 
   const metrics: EntireSessionMetrics[] = [];
   try {
-    const files = readdirSync(sessionsDir);
+    const files = await readdir(sessionsDir);
     for (const file of files) {
       if (!file.endsWith(".json") || file.endsWith(".tmp")) continue;
       try {
-        const data = readFileSync(join(sessionsDir, file), "utf-8");
+        const data = await Bun.file(join(sessionsDir, file)).text();
         const state = JSON.parse(data);
         if (!state.session_id) continue;
         const phase: EntirePhase = state.phase || "idle";
@@ -145,14 +146,17 @@ export function EntireSessions({ onNavigate }: Props) {
   }, []);
 
   useEffect(() => {
-    try {
-      const metrics = loadAllSessionMetrics();
-      setSessions(metrics);
-    } catch (e: any) {
-      console.error("[entire-sessions]", e.message);
-    } finally {
-      setLoading(false);
+    async function load() {
+      try {
+        const metrics = await loadAllSessionMetrics();
+        setSessions(metrics);
+      } catch (e: any) {
+        console.error("[entire-sessions]", e.message);
+      } finally {
+        setLoading(false);
+      }
     }
+    load();
   }, [refreshTick]);
 
   useInput((input, key) => {

@@ -34,7 +34,11 @@ export type DelegationEvent =
   | { type: "TASK_VERIFIED"; taskId: string; verifier: string; passed: boolean; receipt?: VerificationReceipt }
   | { type: "REASSIGNMENT"; taskId: string; from: string; to: string; trigger: string }
   | { type: "DELEGATION_CHAIN"; taskId: string; chain: string[] }
-  | { type: "TRUST_UPDATE"; agent: string; delta: number; reason: string };
+  | { type: "TRUST_UPDATE"; agent: string; delta: number; reason: string }
+  | { type: "TDD_CYCLE_START"; testFile: string; phase: "red" | "green" | "refactor" }
+  | { type: "TDD_TEST_PASS"; testFile: string; passCount: number; duration: number }
+  | { type: "TDD_TEST_FAIL"; testFile: string; failCount: number; duration: number }
+  | { type: "TDD_REFACTOR"; testFile: string };
 
 export type DelegationEventType = DelegationEvent["type"];
 

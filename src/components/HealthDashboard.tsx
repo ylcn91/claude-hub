@@ -3,10 +3,7 @@ import { Box, Text, useInput } from "ink";
 import { NavContext } from "../app.js";
 import { useTheme } from "../themes/index.js";
 import type { AccountHealth } from "../daemon/health-monitor.js";
-import { createConnection } from "net";
-import { readFileSync, existsSync } from "fs";
-import { createLineParser, generateRequestId, frameSend } from "../daemon/framing.js";
-import { getSockPath, getTokensDir } from "../paths.js";
+import { fetchHealthStatus } from "../services/health-loader.js";
 
 const REFRESH_INTERVAL_MS = 10_000;
 
@@ -19,81 +16,6 @@ const STATUS_DOTS: Record<string, string> = {
   degraded: "\u25CF",
   critical: "\u25CF",
 };
-
-/**
- * Query the daemon for health status instead of creating a local HealthMonitor.
- * This ensures the TUI displays the same health data tracked by the daemon.
- */
-async function queryDaemonHealth(): Promise<AccountHealth[]> {
-  const sockPath = getSockPath();
-  if (!existsSync(sockPath)) return [];
-
-  return new Promise((resolve) => {
-    const timeout = setTimeout(() => {
-      socket.destroy();
-      resolve([]);
-    }, 3000);
-
-    const socket = createConnection(sockPath);
-
-    socket.on("error", () => {
-      clearTimeout(timeout);
-      resolve([]);
-    });
-
-    const parser = createLineParser((msg: any) => {
-      if (msg.type === "result" && msg.accounts) {
-        clearTimeout(timeout);
-        socket.destroy();
-        const accounts: AccountHealth[] = msg.accounts.map((a: any) => ({
-          account: a.name,
-          status: a.status,
-          connected: a.connected,
-          lastActivity: a.lastActivity,
-          errorCount: a.errorCount ?? 0,
-          rateLimited: a.rateLimited ?? false,
-          slaViolations: a.slaViolations ?? 0,
-          updatedAt: new Date().toISOString(),
-        }));
-        resolve(accounts);
-      }
-    });
-
-    socket.on("data", (data) => parser.feed(data));
-
-    socket.on("connect", () => {
-      const tokensDir = getTokensDir();
-      try {
-        const files = require("fs").readdirSync(tokensDir);
-        const tokenFile = files.find((f: string) => f.endsWith(".token"));
-        if (!tokenFile) { clearTimeout(timeout); socket.destroy(); resolve([]); return; }
-        const account = tokenFile.replace(".token", "");
-        const token = readFileSync(`${tokensDir}/${tokenFile}`, "utf-8").trim();
-        const authId = generateRequestId();
-        socket.write(frameSend({ type: "auth", account, token, requestId: authId }));
-
-        const authParser = createLineParser((authMsg: any) => {
-          if (authMsg.type === "auth_ok") {
-            const reqId = generateRequestId();
-            socket.write(frameSend({ type: "health_status", requestId: reqId }));
-          } else if (authMsg.type === "result") {
-            origHandler.feed(Buffer.from(JSON.stringify(authMsg) + "\n"));
-          }
-        });
-        const origHandler = parser;
-        socket.removeAllListeners("data");
-        socket.on("data", (data) => {
-          authParser.feed(data);
-          parser.feed(data);
-        });
-      } catch {
-        clearTimeout(timeout);
-        socket.destroy();
-        resolve([]);
-      }
-    });
-  });
-}
 
 export function HealthDashboard({ onNavigate }: Props) {
   const { colors } = useTheme();
@@ -123,7 +45,7 @@ export function HealthDashboard({ onNavigate }: Props) {
   useEffect(() => {
     async function load() {
       try {
-        const accounts = await queryDaemonHealth();
+        const accounts = await fetchHealthStatus();
         setStatuses(accounts);
       } catch (e: any) {
         console.error("[health]", e.message);

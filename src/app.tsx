@@ -21,6 +21,7 @@ import { CouncilPanel } from "./components/CouncilPanel.js";
 import { VerificationView } from "./components/VerificationView.js";
 import { EntireSessions } from "./components/EntireSessions.js";
 import { DelegationChain } from "./components/DelegationChain.js";
+import { TddView } from "./components/TddView.js";
 import { HelpOverlay } from "./components/HelpOverlay.js";
 import { CommandPalette } from "./components/CommandPalette.js";
 import { Sidebar } from "./components/Sidebar.js";
@@ -188,6 +189,7 @@ export function App() {
             {view === "verify" && <VerificationView onNavigate={setView} />}
             {view === "entire" && <EntireSessions onNavigate={setView} />}
             {view === "chains" && <DelegationChain onNavigate={setView} />}
+            {view === "tdd" && <TddView testFile="test/*.test.ts" onNavigate={setView} />}
             {view === "theme" && <ThemePicker onNavigate={setView} onThemeChange={handleThemeChange} />}
           </Box>
           <Sidebar visible={showSidebar} currentView={view} />

@@ -36,10 +36,10 @@ export async function acquireLock(
       if (s.isFile()) {
         const ageMs = Date.now() - s.mtimeMs;
         if (ageMs > ttlMs) {
-          try { await unlink(lockPath); } catch {}
+          try { await unlink(lockPath); } catch { /* stale lock file already removed */ }
         }
       }
-    } catch {}
+    } catch { /* stat failed, lock may have been released concurrently */ }
   }
 
   for (let attempt = 0; attempt <= retries; attempt++) {
@@ -52,7 +52,7 @@ export async function acquireLock(
         async release() {
           if (released) return;
           released = true;
-          try { await rmdir(lockPath); } catch {}
+          try { await rmdir(lockPath); } catch { /* lock dir already removed */ }
         },
       };
     } catch (err: any) {
@@ -63,11 +63,11 @@ export async function acquireLock(
         const lockStat = await stat(lockPath);
         const ageMs = Date.now() - lockStat.mtimeMs;
         if (ageMs > ttlMs) {
-          try { await rmdir(lockPath); } catch {}
+          try { await rmdir(lockPath); } catch { /* stale lock dir already removed */ }
           continue; // Retry immediately after stale cleanup
         }
       } catch {
-        continue; // Lock was released between check and stat
+        continue; /* lock was released between check and stat */
       }
 
       if (attempt < retries) {
@@ -92,7 +92,7 @@ export async function atomicWrite(path: string, data: object): Promise<void> {
     await writeFile(tmpPath, JSON.stringify(data, null, 2), "utf-8");
     await rename(tmpPath, path);
   } finally {
-    try { await unlink(tmpPath); } catch {}
+    try { await unlink(tmpPath); } catch { /* tmp file already renamed or cleaned */ }
     await lock.release();
   }
 }
@@ -103,7 +103,7 @@ export async function atomicRead<T = unknown>(path: string): Promise<T | null> {
     if (!(await file.exists())) return null;
     return await file.json() as T;
   } catch {
-    return null;
+    return null; /* file missing, unreadable, or invalid JSON */
   }
 }
 
@@ -123,6 +123,6 @@ export async function cleanTempFiles(dir: string): Promise<number> {
         cleaned++;
       }
     }
-  } catch {}
+  } catch { /* directory may not exist yet, no temp files to clean */ }
   return cleaned;
 }

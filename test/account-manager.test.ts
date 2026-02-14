@@ -1,12 +1,12 @@
 import { describe, test, expect, beforeEach, afterEach } from "bun:test";
 import { join } from "path";
 import { existsSync, readFileSync, mkdirSync, rmSync, statSync, writeFileSync } from "fs";
-import { mkdir, readFile, symlink } from "node:fs/promises";
 import {
   setupAccount,
   teardownAccount,
   addShellAlias,
   generateToken,
+  validatePurgePath,
   CATPPUCCIN_COLORS,
 } from "../src/services/account-manager";
 
@@ -153,7 +153,7 @@ describe("setupAccount", () => {
       configPath: TEST_CONFIG,
     });
 
-    await expect(
+    expect(
       setupAccount({
         name: "dupe",
         configDir: dir2,
@@ -245,8 +245,8 @@ describe("teardownAccount", () => {
     expect(existsSync(configDir)).toBe(false);
   });
 
-  test("throws for non-existent account", async () => {
-    await expect(
+  test("throws for non-existent account", () => {
+    expect(
       teardownAccount("nonexistent", { configPath: TEST_CONFIG })
     ).rejects.toThrow("Account 'nonexistent' not found");
   });
@@ -323,5 +323,81 @@ describe("addShellAlias", () => {
     } finally {
       process.env.HOME = origHome;
     }
+  });
+
+  test("escapes single quotes in configDir", async () => {
+    const origHome = process.env.HOME;
+    process.env.HOME = TEST_DIR;
+
+    try {
+      const { modified } = await addShellAlias("squote", "/path/with'quote");
+      expect(modified).toBe(true);
+
+      const zshrc = readFileSync(join(TEST_DIR, ".zshrc"), "utf-8");
+      // The single quote should be escaped so it doesn't break the alias
+      expect(zshrc).toContain("# agentctl:squote");
+      expect(zshrc).not.toContain("'/path/with'quote'");
+      expect(zshrc).toContain("'\\''");
+    } finally {
+      process.env.HOME = origHome;
+    }
+  });
+
+  test("escapes dollar signs in configDir", async () => {
+    const origHome = process.env.HOME;
+    process.env.HOME = TEST_DIR;
+
+    try {
+      const { modified } = await addShellAlias("dollar", "/path/$HOME/dir");
+      expect(modified).toBe(true);
+
+      const zshrc = readFileSync(join(TEST_DIR, ".zshrc"), "utf-8");
+      expect(zshrc).toContain("\\$HOME");
+    } finally {
+      process.env.HOME = origHome;
+    }
+  });
+
+  test("escapes backticks in configDir", async () => {
+    const origHome = process.env.HOME;
+    process.env.HOME = TEST_DIR;
+
+    try {
+      const { modified } = await addShellAlias("backtick", "/path/`whoami`/dir");
+      expect(modified).toBe(true);
+
+      const zshrc = readFileSync(join(TEST_DIR, ".zshrc"), "utf-8");
+      expect(zshrc).toContain("\\`whoami\\`");
+    } finally {
+      process.env.HOME = origHome;
+    }
+  });
+});
+
+describe("validatePurgePath", () => {
+  test("rejects root path", () => {
+    expect(() => validatePurgePath("/")).toThrow("too few components");
+  });
+
+  test("rejects home directory", () => {
+    const home = process.env.HOME!;
+    expect(() => validatePurgePath(home)).toThrow();
+  });
+
+  test("rejects paths with too few components", () => {
+    expect(() => validatePurgePath("/Users")).toThrow("too few components");
+  });
+
+  test("rejects paths outside agentctl base directory", () => {
+    expect(() => validatePurgePath("/tmp/some/random/dir")).toThrow(
+      "not under the agentctl config directory"
+    );
+  });
+
+  test("accepts valid path under agentctl directory", () => {
+    const hubDir = process.env.AGENTCTL_DIR ?? `${process.env.HOME}/.agentctl`;
+    const validPath = join(hubDir, "accounts", "test-account");
+    mkdirSync(validPath, { recursive: true });
+    expect(() => validatePurgePath(validPath)).not.toThrow();
   });
 });

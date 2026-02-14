@@ -1,9 +1,12 @@
 // Phase 6: Council as Verification Panel
 // Multi-LLM verification of task completion via council consensus
 
-import { parseJSONFromLLM } from "./council";
-import type { LLMCaller } from "./council";
-import type { CouncilServiceConfig } from "./council-config";
+import {
+  parseJSONFromLLM,
+  collectFromAccounts,
+  anonymizeForPeerReview,
+} from "./council-framework";
+import type { LLMCaller, CouncilServiceConfig } from "./council-framework";
 import { computeSpecHash } from "./verification-receipts";
 
 export type VerificationVerdict = "ACCEPT" | "REJECT" | "ACCEPT_WITH_NOTES";
@@ -189,27 +192,21 @@ async function stage1_collectReviews(
   llmCaller: LLMCaller,
   taskContext: string,
 ): Promise<VerificationReview[]> {
-  const results = await Promise.allSettled(
-    accounts.map(async (account) => {
-      const response = await llmCaller(account, VERIFICATION_STAGE1_PROMPT, taskContext);
-      const parsed = parseJSONFromLLM(response);
-      if (!parsed) {
-        throw new Error(`Failed to parse verification response from ${account}`);
-      }
-      return {
-        account,
-        verdict: normalizeVerdict(parsed.verdict),
-        confidence: parsed.confidence ?? 0.5,
-        reasoning: parsed.reasoning ?? "",
-        issues: parsed.issues ?? [],
-        strengths: parsed.strengths ?? [],
-      } as VerificationReview;
-    }),
-  );
-
-  return results
-    .filter((r): r is PromiseFulfilledResult<VerificationReview> => r.status === "fulfilled")
-    .map((r) => r.value);
+  return collectFromAccounts(accounts, async (account) => {
+    const response = await llmCaller(account, VERIFICATION_STAGE1_PROMPT, taskContext);
+    const parsed = parseJSONFromLLM(response);
+    if (!parsed) {
+      throw new Error(`Failed to parse verification response from ${account}`);
+    }
+    return {
+      account,
+      verdict: normalizeVerdict(parsed.verdict),
+      confidence: parsed.confidence ?? 0.5,
+      reasoning: parsed.reasoning ?? "",
+      issues: parsed.issues ?? [],
+      strengths: parsed.strengths ?? [],
+    } as VerificationReview;
+  });
 }
 
 async function stage2_peerReview(
@@ -218,33 +215,33 @@ async function stage2_peerReview(
   taskContext: string,
   reviews: VerificationReview[],
 ): Promise<PeerEvaluation[]> {
-  const labels = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-  const anonymized = reviews
-    .map((r, i) => {
-      return `Review ${labels[i]}:\n- Verdict: ${r.verdict}\n- Confidence: ${r.confidence}\n- Reasoning: ${r.reasoning}\n- Issues: ${r.issues.join("; ") || "none"}\n- Strengths: ${r.strengths.join("; ") || "none"}`;
-    })
-    .join("\n\n");
+  const anonymized = anonymizeForPeerReview(
+    reviews.map((r) => ({
+      fields: {
+        Verdict: r.verdict,
+        Confidence: String(r.confidence),
+        Reasoning: r.reasoning,
+        Issues: r.issues.length > 0 ? r.issues : ["none"],
+        Strengths: r.strengths.length > 0 ? r.strengths : ["none"],
+      },
+    })),
+    "Review",
+  );
 
   const userPrompt = `${taskContext}\n\nHere are the verification reviews to evaluate:\n\n${anonymized}`;
 
-  const results = await Promise.allSettled(
-    accounts.map(async (account) => {
-      const response = await llmCaller(account, VERIFICATION_STAGE2_PROMPT, userPrompt);
-      const parsed = parseJSONFromLLM(response);
-      if (!parsed) {
-        throw new Error(`Failed to parse peer review from ${account}`);
-      }
-      return {
-        reviewer: account,
-        ranking: parsed.ranking ?? [],
-        reasoning: parsed.reasoning ?? "",
-      } as PeerEvaluation;
-    }),
-  );
-
-  return results
-    .filter((r): r is PromiseFulfilledResult<PeerEvaluation> => r.status === "fulfilled")
-    .map((r) => r.value);
+  return collectFromAccounts(accounts, async (account) => {
+    const response = await llmCaller(account, VERIFICATION_STAGE2_PROMPT, userPrompt);
+    const parsed = parseJSONFromLLM(response);
+    if (!parsed) {
+      throw new Error(`Failed to parse peer review from ${account}`);
+    }
+    return {
+      reviewer: account,
+      ranking: parsed.ranking ?? [],
+      reasoning: parsed.reasoning ?? "",
+    } as PeerEvaluation;
+  });
 }
 
 async function stage3_chairmanVerdict(

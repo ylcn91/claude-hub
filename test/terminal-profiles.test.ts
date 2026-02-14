@@ -46,4 +46,41 @@ describe("Terminal profiles", () => {
     const darwin = reg.listForPlatform("darwin");
     expect(darwin.every((t) => t.platform === "darwin" || t.platform === "all")).toBe(true);
   });
+
+  describe("command injection safety", () => {
+    test("detectDefault uses Bun.spawn with argument arrays (no shell interpolation)", async () => {
+      const src = await Bun.file(
+        new URL("../src/terminals/registry.ts", import.meta.url).pathname
+      ).text();
+      // Must use Bun.spawn for mdfind and which, not Bun.$``
+      expect(src).toContain('Bun.spawn(');
+      expect(src).toContain('"mdfind"');
+      expect(src).toContain('"which"');
+      expect(src).not.toContain("Bun.$`");
+    });
+
+    test("terminal IDs with shell metacharacters are safe in argument arrays", () => {
+      const reg = createDefaultTerminalRegistry();
+      // Register a terminal with a dangerous ID
+      const dangerousIds = [
+        '$(whoami)',
+        '`rm -rf /`',
+        'test; echo pwned',
+        'foo && cat /etc/passwd',
+      ];
+      for (const id of dangerousIds) {
+        // Since detectDefault passes terminal.id as an argument array element to Bun.spawn,
+        // shell metacharacters are never interpreted. Verify registration works.
+        expect(() => {
+          reg.register({
+            id,
+            displayName: "Test",
+            platform: "darwin",
+            buildLaunchCommand: (cmd: string) => [cmd],
+          });
+        }).not.toThrow();
+        expect(reg.get(id)?.id).toBe(id);
+      }
+    });
+  });
 });

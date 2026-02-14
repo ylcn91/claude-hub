@@ -53,6 +53,7 @@ const HubConfigSchema = z.object({
     council: z.boolean().optional(),
     circuitBreaker: z.boolean().optional(),
     cognitiveFriction: z.boolean().optional(),
+    entireMonitoring: z.boolean().optional(),
   }).optional(),
   council: z.object({
     members: z.array(z.string()),

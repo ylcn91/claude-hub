@@ -229,6 +229,36 @@ export function sanitizeHandoffPayload(payload: unknown): SanitizationResult {
 }
 
 /**
+ * Lightweight sanitizer for MCP tool text inputs.
+ * Strips control characters (keeps newlines/tabs), enforces max length,
+ * and warns on suspicious patterns (prompt overrides) without blocking.
+ */
+export function sanitizeMCPText(
+  text: string,
+  maxLength = 10_000,
+): { safe: boolean; sanitized: string; warnings: string[] } {
+  const warnings: string[] = [];
+
+  // Strip control characters (preserve \n, \r, \t)
+  let sanitized = stripControlChars(text);
+
+  // Enforce max length
+  if (sanitized.length > maxLength) {
+    sanitized = sanitized.slice(0, maxLength);
+    warnings.push(`Text truncated from ${text.length} to ${maxLength} characters`);
+  }
+
+  // Check for prompt override patterns (warn only, don't block)
+  for (const { pattern, description } of PROMPT_OVERRIDE_PATTERNS) {
+    if (pattern.test(sanitized)) {
+      warnings.push(`Suspicious pattern: ${description}`);
+    }
+  }
+
+  return { safe: true, sanitized, warnings };
+}
+
+/**
  * Strip control characters from all string fields in the payload, mutating it in place.
  * Returns the same object for convenience.
  */

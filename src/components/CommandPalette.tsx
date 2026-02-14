@@ -31,6 +31,7 @@ export const COMMANDS: Command[] = [
   { id: "verify", label: "Verification View", shortcut: "v", action: "verify" },
   { id: "entire", label: "Entire Sessions", shortcut: "i", action: "entire" },
   { id: "chains", label: "Delegation Chains", shortcut: "g", action: "chains" },
+  { id: "tdd", label: "TDD Workflow", action: "tdd" },
   { id: "theme", label: "Theme", shortcut: "Ctrl+X t", action: "theme" },
   { id: "help", label: "Help", shortcut: "?", action: "help" },
   { id: "quit", label: "Quit", shortcut: "q", action: "quit" },

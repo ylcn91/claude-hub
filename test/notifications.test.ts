@@ -32,7 +32,6 @@ describe("Notifications", () => {
     };
 
     test("disabled config prevents rate limit notification", async () => {
-      // Should return without sending (no error, no osascript call)
       await notifyRateLimit("claude-work", disabledConfig);
       // If we get here, it means the function returned early correctly
       expect(true).toBe(true);
@@ -140,6 +139,23 @@ describe("Notifications", () => {
     test("preview slice handles empty string", () => {
       const empty = "";
       expect(empty.slice(0, 80)).toBe("");
+    });
+  });
+
+  describe("command injection safety", () => {
+    test("sendNotification source has no osascript fallback", async () => {
+      const src = await Bun.file(
+        new URL("../src/services/notifications.ts", import.meta.url).pathname
+      ).text();
+      expect(src).not.toContain("osascript");
+    });
+
+    test("sendNotification uses Bun.spawn with argument array", async () => {
+      const src = await Bun.file(
+        new URL("../src/services/notifications.ts", import.meta.url).pathname
+      ).text();
+      expect(src).toContain('Bun.spawn(["terminal-notifier"');
+      expect(src).not.toContain("Bun.$`");
     });
   });
 });

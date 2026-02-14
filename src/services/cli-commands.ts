@@ -123,10 +123,24 @@ export async function searchCommand(pattern: string): Promise<string> {
 }
 
 export async function healthCommand(account?: string): Promise<string> {
-  const { HealthMonitor } = await import("../daemon/health-monitor.js");
-  const config = await loadConfig();
-  const monitor = new HealthMonitor();
-  const statuses = monitor.getStatuses(config.accounts.map((a) => a.name));
+  const { existsSync } = await import("fs");
+  const { getSockPath } = await import("../paths.js");
+
+  let statuses: import("../daemon/health-monitor.js").AccountHealth[];
+
+  // Prefer querying daemon when it's running
+  if (existsSync(getSockPath())) {
+    const { fetchHealthStatus } = await import("./health-loader.js");
+    statuses = await fetchHealthStatus();
+  }
+
+  // Fall back to local HealthMonitor when daemon is unavailable or returned nothing
+  if (!statuses! || statuses!.length === 0) {
+    const { HealthMonitor } = await import("../daemon/health-monitor.js");
+    const config = await loadConfig();
+    const monitor = new HealthMonitor();
+    statuses = monitor.getStatuses(config.accounts.map((a) => a.name));
+  }
 
   const filtered = account
     ? statuses.filter((s) => s.account === account)

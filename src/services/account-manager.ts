@@ -1,9 +1,9 @@
-import { mkdir, symlink, readlink, unlink, readdir, chmod, writeFile, readFile, copyFile } from "node:fs/promises";
+import { mkdir, symlink, unlink, writeFile, readFile, copyFile } from "node:fs/promises";
 import { existsSync } from "fs";
-import { join, dirname } from "path";
+import { join, dirname, resolve } from "path";
 import { randomBytes } from "crypto";
 import { loadConfig, saveConfig, addAccount, removeAccount } from "../config";
-import { getTokensDir as getTokensDirFromPaths, assertHomeDir } from "../paths";
+import { getTokensDir as getTokensDirFromPaths, assertHomeDir, getHubDir } from "../paths";
 import type { AccountConfig, ProviderId } from "../types";
 
 export const CATPPUCCIN_COLORS = [
@@ -39,6 +39,33 @@ function getTokensDir(): string {
 }
 
 export const ACCOUNT_NAME_RE = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,62}$/;
+
+export function validatePurgePath(dirPath: string): void {
+  const resolved = resolve(dirPath);
+  const home = assertHomeDir();
+  const hubDir = getHubDir();
+
+  // Reject root, home directory itself, or paths with too few components
+  const parts = resolved.split("/").filter(Boolean);
+  if (parts.length < 3) {
+    throw new Error(
+      `Refusing to purge '${resolved}': path has too few components and is too broad.`
+    );
+  }
+
+  if (resolved === "/" || resolved === home) {
+    throw new Error(
+      `Refusing to purge '${resolved}': cannot delete root or home directory.`
+    );
+  }
+
+  // Only allow paths under the agentctl base directory
+  if (!resolved.startsWith(hubDir + "/") && resolved !== hubDir) {
+    throw new Error(
+      `Refusing to purge '${resolved}': path is not under the agentctl config directory '${hubDir}'.`
+    );
+  }
+}
 
 export function validateAccountName(name: string): void {
   if (!ACCOUNT_NAME_RE.test(name)) {
@@ -173,9 +200,10 @@ export async function teardownAccount(
     await unlink(tokenPath);
   }
 
-  // Purge: remove the config directory
+  // Purge: remove the config directory (with safety checks)
   if (opts?.purge) {
-    const expandedDir = account.configDir.replace(/^~/, assertHomeDir());
+    const expandedDir = resolve(account.configDir.replace(/^~/, assertHomeDir()));
+    validatePurgePath(expandedDir);
     if (existsSync(expandedDir)) {
       const { rm } = await import("node:fs/promises");
       await rm(expandedDir, { recursive: true, force: true });
@@ -192,7 +220,16 @@ export async function addShellAlias(
   configDir: string
 ): Promise<{ modified: boolean; backupPath: string | null }> {
   const zshrcPath = `${assertHomeDir()}/.zshrc`;
-  const aliasLine = `alias claude-${name}='CLAUDE_CONFIG_DIR="${configDir}" claude'`;
+  // Escape configDir for shell safety:
+  // 1. Escape for double-quote context (alias body is re-parsed at invocation)
+  // 2. Escape for single-quote context (alias definition)
+  const escapedForDoubleQuotes = configDir
+    .replace(/\\/g, "\\\\")
+    .replace(/"/g, '\\"')
+    .replace(/\$/g, "\\$")
+    .replace(/`/g, "\\`");
+  const safeConfigDir = escapedForDoubleQuotes.replace(/'/g, "'\\''");
+  const aliasLine = `alias claude-${name}='CLAUDE_CONFIG_DIR="${safeConfigDir}" claude'`;
   const marker = `# agentctl:${name}`;
 
   let content = "";

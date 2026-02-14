@@ -9,7 +9,7 @@ function getToken(account: string): string | null {
   try {
     return readFileSync(`${getHubDir()}/tokens/${account}.token`, "utf-8").trim();
   } catch {
-    return null;
+    return null; /* token file missing or unreadable */
   }
 }
 
@@ -33,7 +33,7 @@ export async function fetchUnreadMessages(account: string): Promise<DaemonMessag
 
   return new Promise((resolve) => {
     const timeout = setTimeout(() => {
-      try { socket.destroy(); } catch {}
+      try { socket.destroy(); } catch { /* socket already destroyed or errored */ }
       resolve([]);
     }, 2000);
 
@@ -89,7 +89,7 @@ export async function fetchUnreadCount(account: string): Promise<number> {
 
   return new Promise((resolve) => {
     const timeout = setTimeout(() => {
-      try { socket.destroy(); } catch {}
+      try { socket.destroy(); } catch { /* socket already destroyed or errored */ }
       resolve(0);
     }, 2000);
 
@@ -159,7 +159,7 @@ export async function fetchActiveSession(account: string): Promise<{ initiator: 
 
   return new Promise((resolve) => {
     const timeout = setTimeout(() => {
-      try { socket.destroy(); } catch {}
+      try { socket.destroy(); } catch { /* socket already destroyed or errored */ }
       resolve(null);
     }, 2000);
 

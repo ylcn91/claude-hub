@@ -1,8 +1,16 @@
-import type { CouncilResponse, CouncilRanking, AggregateRank, AccountConfig } from "../types";
-import { DEFAULT_COUNCIL_CONFIG } from "./council-config";
-import type { CouncilServiceConfig } from "./council-config";
+import type { CouncilResponse, CouncilRanking, AggregateRank } from "../types";
+import {
+  parseJSONFromLLM,
+  collectFromAccounts,
+  anonymizeForPeerReview,
+  DEFAULT_COUNCIL_CONFIG,
+} from "./council-framework";
+import type { LLMCaller, CouncilServiceConfig } from "./council-framework";
 
-export { type CouncilServiceConfig as CouncilConfig };
+// Re-export framework types and utilities for backwards compatibility
+export { parseJSONFromLLM, buildProviderCommand, createAccountCaller } from "./council-framework";
+export type { LLMCaller } from "./council-framework";
+export { type CouncilServiceConfig as CouncilConfig } from "./council-framework";
 
 export interface CouncilAnalysis {
   taskGoal: string;
@@ -19,117 +27,6 @@ export interface CouncilAnalysis {
     recommendedProvider?: string;
     confidence: number;
     dissenting_views?: string[];
-  };
-}
-
-export type LLMCaller = (account: string, systemPrompt: string, userPrompt: string) => Promise<string>;
-
-export function parseJSONFromLLM(text: string): any {
-  try {
-    return JSON.parse(text);
-  } catch {
-    // Try extracting from markdown fenced blocks
-    const fenceMatch = text.match(/```(?:json)?\s*\n?([\s\S]*?)\n?\s*```/);
-    if (fenceMatch) {
-      try {
-        return JSON.parse(fenceMatch[1].trim());
-      } catch {
-        return null;
-      }
-    }
-    return null;
-  }
-}
-
-interface ProviderCommand {
-  cmd: string[];
-  env: Record<string, string>;
-  parseOutput: (stdout: string) => string;
-}
-
-export function buildProviderCommand(account: AccountConfig, prompt: string): ProviderCommand {
-  const baseEnv: Record<string, string> = {};
-
-  switch (account.provider) {
-    case "claude-code":
-      return {
-        cmd: ["claude", "-p", "--output-format", "json"],
-        env: { ...baseEnv, CLAUDE_CONFIG_DIR: account.configDir },
-        parseOutput: (stdout: string) => {
-          try {
-            const json = JSON.parse(stdout);
-            return json.result ?? stdout;
-          } catch {
-            return stdout;
-          }
-        },
-      };
-    case "codex-cli":
-      return {
-        cmd: ["codex", "-q"],
-        env: { ...baseEnv, CODEX_HOME: account.configDir },
-        parseOutput: (stdout: string) => stdout,
-      };
-    case "opencode":
-      return {
-        cmd: ["opencode", "run"],
-        env: baseEnv,
-        parseOutput: (stdout: string) => stdout,
-      };
-    case "cursor-agent":
-      return {
-        cmd: ["agent"],
-        env: baseEnv,
-        parseOutput: (stdout: string) => stdout,
-      };
-    case "gemini-cli":
-      return {
-        cmd: ["gemini"],
-        env: baseEnv,
-        parseOutput: (stdout: string) => stdout,
-      };
-    case "openhands":
-      return {
-        cmd: ["openhands"],
-        env: baseEnv,
-        parseOutput: (stdout: string) => stdout,
-      };
-    default:
-      throw new Error(`Unsupported provider: ${account.provider}`);
-  }
-}
-
-export function createAccountCaller(accounts: AccountConfig[]): LLMCaller {
-  const accountMap = new Map<string, AccountConfig>();
-  for (const acc of accounts) {
-    accountMap.set(acc.name, acc);
-  }
-
-  return async (accountName: string, systemPrompt: string, userPrompt: string): Promise<string> => {
-    const account = accountMap.get(accountName);
-    if (!account) {
-      throw new Error(`Account not found: ${accountName}`);
-    }
-
-    const prompt = `${systemPrompt}\n\n${userPrompt}`;
-    const { cmd, env, parseOutput } = buildProviderCommand(account, prompt);
-
-    const proc = Bun.spawn(cmd, {
-      stdin: new Response(prompt).body,
-      stdout: "pipe",
-      stderr: "pipe",
-      env: { ...process.env, ...env },
-    });
-
-    const stdout = await new Response(proc.stdout).text();
-    const exitCode = await proc.exited;
-
-    if (exitCode !== 0) {
-      const stderr = await new Response(proc.stderr).text();
-      throw new Error(`Account ${accountName} CLI exited with code ${exitCode}: ${stderr.slice(0, 500)}`);
-    }
-
-    return parseOutput(stdout.trim());
   };
 }
 
@@ -257,56 +154,52 @@ export class CouncilService {
       ? `Task: ${goal}\n\nAdditional context: ${context}`
       : `Task: ${goal}`;
 
-    const results = await Promise.allSettled(
-      this.config.members.map(async (account) => {
-        const response = await this.callLLM(account, STAGE1_SYSTEM_PROMPT, userPrompt);
-        const parsed = parseJSONFromLLM(response);
-        if (!parsed) {
-          throw new Error(`Failed to parse response from ${account}`);
-        }
-        return {
-          account,
-          complexity: parsed.complexity ?? "medium",
-          estimatedDurationMinutes: parsed.estimatedDurationMinutes ?? 30,
-          requiredSkills: parsed.requiredSkills ?? [],
-          recommendedApproach: parsed.recommendedApproach ?? "",
-          risks: parsed.risks ?? [],
-          suggestedProvider: parsed.suggestedProvider,
-        } as CouncilResponse;
-      })
-    );
-
-    return results
-      .filter((r): r is PromiseFulfilledResult<CouncilResponse> => r.status === "fulfilled")
-      .map((r) => r.value);
+    return collectFromAccounts(this.config.members, async (account) => {
+      const response = await this.callLLM(account, STAGE1_SYSTEM_PROMPT, userPrompt);
+      const parsed = parseJSONFromLLM(response);
+      if (!parsed) {
+        throw new Error(`Failed to parse response from ${account}`);
+      }
+      return {
+        account,
+        complexity: parsed.complexity ?? "medium",
+        estimatedDurationMinutes: parsed.estimatedDurationMinutes ?? 30,
+        requiredSkills: parsed.requiredSkills ?? [],
+        recommendedApproach: parsed.recommendedApproach ?? "",
+        risks: parsed.risks ?? [],
+        suggestedProvider: parsed.suggestedProvider,
+      } as CouncilResponse;
+    });
   }
 
   async stage2_peerReview(goal: string, analyses: CouncilResponse[]): Promise<CouncilRanking[]> {
-    const labels = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-    const anonymized = analyses.map((a, i) => {
-      return `Analysis ${labels[i]}:\n- Complexity: ${a.complexity}\n- Estimated Duration: ${a.estimatedDurationMinutes} minutes\n- Required Skills: ${a.requiredSkills.join(", ")}\n- Approach: ${a.recommendedApproach}\n- Risks: ${a.risks.join(", ")}`;
-    }).join("\n\n");
+    const anonymized = anonymizeForPeerReview(
+      analyses.map((a) => ({
+        fields: {
+          Complexity: a.complexity,
+          "Estimated Duration": `${a.estimatedDurationMinutes} minutes`,
+          "Required Skills": a.requiredSkills,
+          Approach: a.recommendedApproach,
+          Risks: a.risks,
+        },
+      })),
+      "Analysis",
+    );
 
     const userPrompt = `Task: ${goal}\n\nHere are the analyses to review:\n\n${anonymized}`;
 
-    const results = await Promise.allSettled(
-      this.config.members.map(async (account) => {
-        const response = await this.callLLM(account, STAGE2_SYSTEM_PROMPT, userPrompt);
-        const parsed = parseJSONFromLLM(response);
-        if (!parsed) {
-          throw new Error(`Failed to parse peer review from ${account}`);
-        }
-        return {
-          reviewer: account,
-          ranking: parsed.ranking ?? [],
-          reasoning: parsed.reasoning ?? "",
-        } as CouncilRanking;
-      })
-    );
-
-    return results
-      .filter((r): r is PromiseFulfilledResult<CouncilRanking> => r.status === "fulfilled")
-      .map((r) => r.value);
+    return collectFromAccounts(this.config.members, async (account) => {
+      const response = await this.callLLM(account, STAGE2_SYSTEM_PROMPT, userPrompt);
+      const parsed = parseJSONFromLLM(response);
+      if (!parsed) {
+        throw new Error(`Failed to parse peer review from ${account}`);
+      }
+      return {
+        reviewer: account,
+        ranking: parsed.ranking ?? [],
+        reasoning: parsed.reasoning ?? "",
+      } as CouncilRanking;
+    });
   }
 
   async stage3_synthesize(

@@ -2,10 +2,7 @@ import { useState, useEffect, useContext } from "react";
 import { Box, Text, useInput } from "ink";
 import { NavContext } from "../app.js";
 import { useTheme } from "../themes/index.js";
-import { existsSync, readFileSync } from "fs";
-import { createConnection } from "net";
-import { createLineParser, generateRequestId, frameSend } from "../daemon/framing.js";
-import { getSockPath, getTokensDir } from "../paths.js";
+import { fetchDelegationChains, type DelegationChainData } from "../services/delegation-chain-loader.js";
 import { DEFAULT_DELEGATION_DEPTH_CONFIG } from "../services/delegation-depth.js";
 
 const REFRESH_INTERVAL_MS = 10_000;
@@ -20,109 +17,6 @@ interface DelegationNode {
   taskId?: string;
   blocked?: boolean;
   blockReason?: string;
-}
-
-interface DelegationChainData {
-  id: string;
-  taskId: string;
-  chain: string[];
-  timestamp: string;
-  maxDepth: number;
-  blocked: boolean;
-  blockReason?: string;
-}
-
-/**
- * Query the daemon's activity store for DELEGATION_CHAIN events.
- * Falls back to empty if no daemon is running.
- */
-async function queryDelegationChains(): Promise<DelegationChainData[]> {
-  const sockPath = getSockPath();
-  if (!existsSync(sockPath)) return [];
-
-  return new Promise((resolve) => {
-    const timeout = setTimeout(() => {
-      socket.destroy();
-      resolve([]);
-    }, 3000);
-
-    const socket = createConnection(sockPath);
-
-    socket.on("error", () => {
-      clearTimeout(timeout);
-      resolve([]);
-    });
-
-    const parser = createLineParser((msg: any) => {
-      if (msg.type === "result" && msg.events) {
-        clearTimeout(timeout);
-        socket.destroy();
-        const maxDepth = DEFAULT_DELEGATION_DEPTH_CONFIG.maxDepth;
-        const chains: DelegationChainData[] = msg.events.map((e: any) => {
-          const chain: string[] = e.metadata?.chain ?? [];
-          const depth = Math.max(0, chain.length - 1);
-          return {
-            id: e.id,
-            taskId: e.taskId ?? e.metadata?.taskId ?? "unknown",
-            chain,
-            timestamp: e.timestamp,
-            maxDepth,
-            blocked: depth >= maxDepth,
-            blockReason:
-              depth >= maxDepth
-                ? `Depth ${depth} exceeds max ${maxDepth}`
-                : undefined,
-          };
-        });
-        resolve(chains);
-      }
-    });
-
-    socket.on("data", (data) => parser.feed(data));
-
-    socket.on("connect", () => {
-      const tokensDir = getTokensDir();
-      try {
-        const files = require("fs").readdirSync(tokensDir);
-        const tokenFile = files.find((f: string) => f.endsWith(".token"));
-        if (!tokenFile) {
-          clearTimeout(timeout);
-          socket.destroy();
-          resolve([]);
-          return;
-        }
-        const account = tokenFile.replace(".token", "");
-        const token = readFileSync(`${tokensDir}/${tokenFile}`, "utf-8").trim();
-        const authId = generateRequestId();
-        socket.write(
-          frameSend({ type: "auth", account, token, requestId: authId }),
-        );
-
-        const authParser = createLineParser((authMsg: any) => {
-          if (authMsg.type === "auth_ok") {
-            const reqId = generateRequestId();
-            socket.write(
-              frameSend({
-                type: "query_activity",
-                activityType: "delegation_chain",
-                limit: 50,
-                requestId: reqId,
-              }),
-            );
-          }
-        });
-        socket.removeAllListeners("data");
-        socket.on("data", (data) => {
-          authParser.feed(data);
-          parser.feed(data);
-        });
-      } catch {
-        clearTimeout(timeout);
-        socket.destroy();
-        resolve([]);
-      }
-    });
-  });
 }
 
 // depthColor moved inside component to use theme
@@ -167,7 +61,7 @@ export function DelegationChain({ onNavigate }: Props) {
   useEffect(() => {
     async function load() {
       try {
-        const data = await queryDelegationChains();
+        const data = await fetchDelegationChains();
         setChains(data);
       } catch (e: any) {
         console.error("[delegation-chain]", e.message);

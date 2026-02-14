@@ -1,6 +1,5 @@
-import React, { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { render, Box, Text } from "ink";
-import { execa } from "execa";
 
 function App() {
   const [status, setStatus] = useState("testing...");
@@ -13,8 +12,8 @@ function App() {
       setStatus(exists ? "stats-cache.json found" : "stats-cache.json not found");
 
       // Test 2: Can we spawn a process?
-      const result = await execa("echo", ["spawn works"]);
-      setStatus((prev) => `${prev} | ${result.stdout}`);
+      const result = await Bun.$`echo spawn works`.text();
+      setStatus((prev) => `${prev} | ${result.trim()}`);
     }
     test();
   }, []);

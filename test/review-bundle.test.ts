@@ -2,7 +2,7 @@ import { describe, test, expect, beforeEach, afterEach } from "bun:test";
 import { join } from "path";
 import { mkdirSync, rmSync } from "fs";
 import { analyzeRisks } from "../src/services/review-bundle";
-import { saveBundle, getBundle, deleteBundle, listBundles } from "../src/services/review-bundle-store";
+import { saveBundle, getBundle, deleteBundle, listBundles, sanitizeTaskId } from "../src/services/review-bundle-store";
 import type { ReviewBundle } from "../src/services/review-bundle";
 
 const TEST_DIR = join(import.meta.dir, ".test-review-bundle");
@@ -181,4 +181,69 @@ describe("review-bundle-store", () => {
     const ids = listBundles();
     expect(ids).toEqual([]);
   });
+});
+
+describe("sanitizeTaskId", () => {
+  test("allows valid alphanumeric taskId", () => {
+    expect(sanitizeTaskId("task-001")).toBe("task-001");
+    expect(sanitizeTaskId("my_task_2")).toBe("my_task_2");
+    expect(sanitizeTaskId("TASK123")).toBe("TASK123");
+  });
+
+  test("rejects path traversal with ../", () => {
+    expect(() => sanitizeTaskId("../etc/passwd")).toThrow("Invalid taskId");
+  });
+
+  test("rejects path traversal with /", () => {
+    expect(() => sanitizeTaskId("foo/bar")).toThrow("Invalid taskId");
+  });
+
+  test("rejects path traversal with backslash", () => {
+    expect(() => sanitizeTaskId("foo\\bar")).toThrow("Invalid taskId");
+  });
+
+  test("rejects null bytes", () => {
+    expect(() => sanitizeTaskId("task\0id")).toThrow("Invalid taskId");
+  });
+
+  test("rejects empty string", () => {
+    expect(() => sanitizeTaskId("")).toThrow("Invalid taskId");
+  });
+
+  test("rejects dots only", () => {
+    expect(() => sanitizeTaskId("..")).toThrow("Invalid taskId");
+  });
+
+  test("rejects spaces", () => {
+    expect(() => sanitizeTaskId("task id")).toThrow("Invalid taskId");
+  });
+});
+
+describe("review-bundle-store path traversal protection", () => {
+  test("getBundle rejects path traversal", () => {
+    expect(() => getBundle("../../etc/passwd")).toThrow("Invalid taskId");
+  });
+
+  test("saveBundle rejects path traversal", () => {
+    const malicious = makeBundleFixture("../../../etc/passwd");
+    expect(() => saveBundle(malicious)).toThrow("Invalid taskId");
+  });
+
+  test("deleteBundle rejects path traversal", () => {
+    expect(() => deleteBundle("../secret")).toThrow("Invalid taskId");
+  });
+
+  function makeBundleFixture(taskId: string): ReviewBundle {
+    return {
+      taskId,
+      generatedAt: new Date().toISOString(),
+      gitDiff: {
+        summary: " src/app.ts | 5 ++---\n 1 file changed, 2 insertions(+), 3 deletions(-)",
+        filesChanged: 1,
+        insertions: 2,
+        deletions: 3,
+      },
+      riskNotes: [],
+    };
+  }
 });

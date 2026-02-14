@@ -110,6 +110,28 @@ export const DEFAULT_CONFIG: HubConfig = {
   },
 };
 
+// TDD workflow types
+export type TddPhase = "idle" | "red" | "green" | "refactor";
+
+export interface TddCycleEvent {
+  phase: TddPhase;
+  timestamp: string;
+  testFile: string;
+  passed?: boolean;
+  failCount?: number;
+  passCount?: number;
+  duration?: number;
+}
+
+export interface TddState {
+  phase: TddPhase;
+  testFile: string;
+  cycles: TddCycleEvent[];
+  lastTestOutput: string;
+  lastTestPassed: boolean;
+  startedAt: string;
+}
+
 // Re-export path functions from the consolidated paths module
 export {
   getHubDir, getSockPath, getPidPath, getTokensDir, getConfigPath,

@@ -62,7 +62,7 @@ describe("COMMANDS list", () => {
       "dashboard", "launcher", "usage", "tasks", "inbox",
       "add", "sla", "prompts", "analytics", "workflows",
       "health", "council", "verify", "entire", "chains",
-      "help", "quit",
+      "tdd", "help", "quit",
     ];
 
     for (const view of expectedViews) {
@@ -79,8 +79,8 @@ describe("COMMANDS list", () => {
     }
   });
 
-  test("command count is 18", async () => {
+  test("command count is 19", async () => {
     const { COMMANDS } = await import("../src/components/CommandPalette");
-    expect(COMMANDS.length).toBe(18);
+    expect(COMMANDS.length).toBe(19);
   });
 });

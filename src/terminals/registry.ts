@@ -29,11 +29,24 @@ export class TerminalRegistry {
     for (const terminal of candidates) {
       try {
         if (process.platform === "darwin") {
-          await Bun.$`mdfind "kMDItemCFBundleIdentifier == '*'" | grep -qi ${terminal.id}`.quiet();
+          // Use Bun.spawn with argument arrays to prevent shell injection
+          const mdfindProc = Bun.spawn(
+            ["mdfind", `kMDItemCFBundleIdentifier == '${terminal.id}'`],
+            { stdout: "pipe", stderr: "ignore" }
+          );
+          const output = await new Response(mdfindProc.stdout).text();
+          await mdfindProc.exited;
+          if (mdfindProc.exitCode === 0 && output.trim().length > 0) {
+            return terminal;
+          }
+          continue;
+        }
+        const whichProc = Bun.spawn(["which", terminal.id], { stdout: "ignore", stderr: "ignore" });
+        await whichProc.exited;
+        if (whichProc.exitCode === 0) {
           return terminal;
         }
-        await Bun.$`which ${terminal.id}`.quiet();
-        return terminal;
+        continue;
       } catch {
         continue;
       }

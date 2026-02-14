@@ -19,7 +19,7 @@ export const DEFAULT_NOTIFICATION_CONFIG: NotificationConfig = {
   },
 };
 
-// macOS notification via terminal-notifier (custom icon, clickable) with osascript fallback
+// macOS notification via terminal-notifier (custom icon, clickable)
 export async function sendNotification(
   title: string,
   body: string,
@@ -29,23 +29,14 @@ export async function sendNotification(
   if (process.env.NODE_ENV === "test" || process.env.BUN_ENV === "test") return false;
 
   try {
-    // Prefer terminal-notifier for proper app icon and clickable notifications
     const args = ["-title", title, "-message", body, "-group", "agentctl"];
     if (opts?.subtitle) args.push("-subtitle", opts.subtitle);
     if (opts?.sound) args.push("-sound", opts.sound);
-    await Bun.$`terminal-notifier ${args}`.quiet();
-    return true;
+    const proc = Bun.spawn(["terminal-notifier", ...args], { stdout: "ignore", stderr: "ignore" });
+    await proc.exited;
+    return proc.exitCode === 0;
   } catch {
-    // Fallback to osascript if terminal-notifier unavailable
-    try {
-      const subtitle = opts?.subtitle ? `subtitle "${opts.subtitle}"` : "";
-      const sound = opts?.sound ? `sound name "${opts.sound}"` : "";
-      const script = `display notification "${body}" with title "${title}" ${subtitle} ${sound}`;
-      await Bun.$`osascript -e ${script}`.quiet();
-      return true;
-    } catch {
-      return false;
-    }
+    return false;
   }
 }
 
