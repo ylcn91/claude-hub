@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from "react";
+import { useState, useEffect, useContext } from "react";
 import { Box, Text, useInput } from "ink";
+import { NavContext } from "../app.js";
 import {
   loadTasks,
   saveTasks,
@@ -51,6 +52,13 @@ export function TaskBoard({ onNavigate, accounts = [] }: Props) {
   const [sortByPrio, setSortByPrio] = useState(false);
   const [frictionMessage, setFrictionMessage] = useState<{ text: string; color: string } | null>(null);
 
+  const { setGlobalNavEnabled } = useContext(NavContext);
+
+  useEffect(() => {
+    setGlobalNavEnabled(false);
+    return () => setGlobalNavEnabled(true);
+  }, []);
+
   useEffect(() => {
     loadTasks().then((b) => {
       setBoard(b);
@@ -71,59 +79,36 @@ export function TaskBoard({ onNavigate, accounts = [] }: Props) {
     await saveTasks(newBoard);
   }
 
-  useInput((input, key) => {
-    if (mode === "add") {
-      if (key.return) {
-        if (inputBuffer.trim()) {
-          const newBoard = addTask(board, inputBuffer.trim());
+  function commitInput(currentMode: Mode, value: string) {
+    if (currentMode === "add") {
+      const newBoard = addTask(board, value);
+      persist(newBoard);
+    } else if (currentMode === "reject") {
+      const task = flatTasks[selectedIndex];
+      if (task) {
+        const newBoard = rejectTask(board, task.id, value);
+        persist(newBoard);
+      }
+    } else if (currentMode === "justify") {
+      const task = flatTasks[selectedIndex];
+      if (task) {
+        try {
+          const newBoard = acceptTask(board, task.id, value);
           persist(newBoard);
+          setFrictionMessage({ text: "Accepted with justification", color: "green" });
+        } catch (e: any) {
+          console.error("[taskboard]", e.message);
         }
-        setInputBuffer("");
-        setMode("browse");
-      } else if (key.escape) {
-        setInputBuffer("");
-        setMode("browse");
-      } else if (key.backspace || key.delete) {
-        setInputBuffer((b) => b.slice(0, -1));
-      } else if (input && !key.ctrl && !key.meta) {
-        setInputBuffer((b) => b + input);
       }
-      return;
     }
+  }
 
-    if (mode === "reject") {
+  useInput((input, key) => {
+    // All text-input modes share identical key handling
+    if (mode === "add" || mode === "reject" || mode === "justify") {
       if (key.return) {
         if (inputBuffer.trim()) {
-          const task = flatTasks[selectedIndex];
-          if (task) {
-            const newBoard = rejectTask(board, task.id, inputBuffer.trim());
-            persist(newBoard);
-          }
-        }
-        setInputBuffer("");
-        setMode("browse");
-      } else if (key.escape) {
-        setInputBuffer("");
-        setMode("browse");
-      } else if (key.backspace || key.delete) {
-        setInputBuffer((b) => b.slice(0, -1));
-      } else if (input && !key.ctrl && !key.meta) {
-        setInputBuffer((b) => b + input);
-      }
-      return;
-    }
-
-    if (mode === "justify") {
-      if (key.return) {
-        if (inputBuffer.trim()) {
-          const task = flatTasks[selectedIndex];
-          if (task) {
-            try {
-              const newBoard = acceptTask(board, task.id, inputBuffer.trim());
-              persist(newBoard);
-              setFrictionMessage({ text: "Accepted with justification", color: "green" });
-            } catch (e: any) { console.error("[taskboard]", e.message); }
-          }
+          commitInput(mode, inputBuffer.trim());
         }
         setInputBuffer("");
         setMode("browse");

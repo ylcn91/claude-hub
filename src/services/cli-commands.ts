@@ -7,7 +7,7 @@ export async function statusCommand(configPath?: string): Promise<string> {
   const data = await loadDashboardData(configPath);
 
   if (data.accounts.length === 0) {
-    return "No accounts configured. Run: ch add <name>";
+    return "No accounts configured. Run: actl add <name>";
   }
 
   const lines = data.accounts.map((s) => {
@@ -24,7 +24,7 @@ export async function usageCommand(configPath?: string): Promise<string> {
   const data = await loadDashboardData(configPath);
 
   if (data.accounts.length === 0) {
-    return "No accounts configured. Run: ch add <name>";
+    return "No accounts configured. Run: actl add <name>";
   }
 
   const header = `${"Account".padEnd(20)} ${"Today".padEnd(8)} ${"Total".padEnd(10)} ${"Quota".padEnd(20)}`;
@@ -45,7 +45,7 @@ export async function listCommand(configPath?: string): Promise<string> {
   const config = await loadConfig(configPath);
 
   if (config.accounts.length === 0) {
-    return "No accounts configured. Run: ch add <name>";
+    return "No accounts configured. Run: actl add <name>";
   }
 
   const lines = config.accounts.map((a) => {
@@ -62,7 +62,7 @@ export async function findCommand(pattern: string, configPath?: string): Promise
   const config = await loadConfig(configPath);
 
   if (config.accounts.length === 0) {
-    return "No accounts configured. Run: ch add <name>";
+    return "No accounts configured. Run: actl add <name>";
   }
 
   const lower = pattern.toLowerCase();

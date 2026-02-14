@@ -28,7 +28,8 @@ function MascotLine({ line }: { line: string }) {
   );
 }
 
-export function Header({ view, showMascot }: { view: string; showMascot?: boolean }) {
+export function Header({ view, showMascot, globalNavEnabled = true }: { view: string; showMascot?: boolean; globalNavEnabled?: boolean }) {
+  const dimNav = !globalNavEnabled;
   return (
     <Box flexDirection="column">
       {showMascot && (
@@ -47,29 +48,30 @@ export function Header({ view, showMascot }: { view: string; showMascot?: boolea
       <Box borderStyle="round" borderColor="magenta" paddingX={1}>
         <Text bold color="magenta">agentctl</Text>
         <Text> | </Text>
-        <Text color={view === "dashboard" ? "cyan" : "gray"}>[d]ash</Text>
+        <Text color={view === "dashboard" ? "cyan" : "gray"} dimColor={dimNav}>[d]ash</Text>
         <Text> </Text>
-        <Text color={view === "launcher" ? "cyan" : "gray"}>[l]aunch</Text>
+        <Text color={view === "launcher" ? "cyan" : "gray"} dimColor={dimNav}>[l]aunch</Text>
         <Text> </Text>
-        <Text color={view === "usage" ? "cyan" : "gray"}>[u]sage</Text>
+        <Text color={view === "usage" ? "cyan" : "gray"} dimColor={dimNav}>[u]sage</Text>
         <Text> </Text>
-        <Text color={view === "tasks" ? "cyan" : "gray"}>[t]asks</Text>
+        <Text color={view === "tasks" ? "cyan" : "gray"} dimColor={dimNav}>[t]asks</Text>
         <Text> </Text>
-        <Text color={view === "inbox" ? "cyan" : "gray"}>[m]sg</Text>
+        <Text color={view === "inbox" ? "cyan" : "gray"} dimColor={dimNav}>[m]sg</Text>
         <Text> </Text>
-        <Text color={view === "sla" ? "cyan" : "gray"}>[e]sla</Text>
+        <Text color={view === "sla" ? "cyan" : "gray"} dimColor={dimNav}>[e]sla</Text>
         <Text> </Text>
-        <Text color={view === "prompts" ? "cyan" : "gray"}>[r]prompts</Text>
+        <Text color={view === "prompts" ? "cyan" : "gray"} dimColor={dimNav}>[r]prompts</Text>
         <Text> </Text>
-        <Text color={view === "council" ? "cyan" : "gray"}>[c]ouncil</Text>
+        <Text color={view === "council" ? "cyan" : "gray"} dimColor={dimNav}>[c]ouncil</Text>
         <Text> </Text>
-        <Text color={view === "verify" ? "cyan" : "gray"}>[v]erify</Text>
+        <Text color={view === "verify" ? "cyan" : "gray"} dimColor={dimNav}>[v]erify</Text>
         <Text> </Text>
-        <Text color={view === "entire" ? "cyan" : "gray"}>[i]entire</Text>
+        <Text color={view === "entire" ? "cyan" : "gray"} dimColor={dimNav}>[i]entire</Text>
         <Text> </Text>
-        <Text color={view === "chains" ? "cyan" : "gray"}>[g]chains</Text>
+        <Text color={view === "chains" ? "cyan" : "gray"} dimColor={dimNav}>[g]chains</Text>
         <Text> </Text>
         <Text color="gray">[a]dd [q]uit</Text>
+        {dimNav && <Text color="gray" dimColor> | [Esc] nav</Text>}
       </Box>
     </Box>
   );

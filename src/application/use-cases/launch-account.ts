@@ -32,7 +32,7 @@ export async function launchAccount(
     (a) => a.name.toLowerCase() === accountName.toLowerCase()
   );
   if (!accountConfig) {
-    return { success: false, shellCmd: "", error: `Account '${accountName}' not found. Run: ch list` };
+    return { success: false, shellCmd: "", error: `Account '${accountName}' not found. Run: actl list` };
   }
 
   const resolvedDir = opts.dir ?? process.cwd();

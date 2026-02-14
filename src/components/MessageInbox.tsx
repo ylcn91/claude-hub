@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { Box, Text, useInput } from "ink";
 import { loadConfig } from "../config.js";
 import { fetchUnreadMessages } from "../services/daemon-client.js";
@@ -32,16 +32,13 @@ export function MessageInbox({ onNavigate }: Props) {
     async function load() {
       try {
         const config = await loadConfig();
-        const results: AccountMessages[] = [];
-
-        for (const account of config.accounts) {
-          const msgs = await fetchUnreadMessages(account.name);
-          results.push({
+        const results = await Promise.all(
+          config.accounts.map(async (account) => ({
             accountName: account.name,
             accountColor: account.color,
-            messages: msgs,
-          });
-        }
+            messages: await fetchUnreadMessages(account.name),
+          }))
+        );
 
         setAccounts(results);
       } catch(e: any) { console.error("[inbox]", e.message) }
@@ -50,9 +47,7 @@ export function MessageInbox({ onNavigate }: Props) {
     load();
   }, []);
 
-  useInput((input, key) => {
-    if (input === "d") onNavigate("dashboard");
-    if (input === "q") process.exit(0);
+  useInput((_input, key) => {
     if (key.upArrow && selectedAccount > 0) {
       setSelectedAccount(selectedAccount - 1);
     }
@@ -69,6 +64,7 @@ export function MessageInbox({ onNavigate }: Props) {
     return (
       <Box flexDirection="column" paddingY={1}>
         <Text color="gray">No accounts configured.</Text>
+        <Text color="gray">Press [a] to add an account, or run: actl add {"<name>"}</Text>
       </Box>
     );
   }
@@ -116,7 +112,7 @@ export function MessageInbox({ onNavigate }: Props) {
         </Box>
       ))}
       <Box marginTop={1}>
-        <Text color="gray">[d] dashboard  [q] quit</Text>
+        <Text color="gray">[↑/↓] navigate  [Esc] dashboard  [q] quit</Text>
       </Box>
     </Box>
   );

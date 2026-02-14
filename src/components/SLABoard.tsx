@@ -1,7 +1,9 @@
-import React, { useState, useEffect } from "react";
+import { useState, useEffect, useContext } from "react";
 import { Box, Text, useInput } from "ink";
+import { NavContext } from "../app.js";
 import { loadTasks } from "../services/tasks.js";
 import { checkStaleTasks, humanTime, formatEscalationMessage, DEFAULT_SLA_CONFIG, type Escalation, type AdaptiveEscalation, type EntireTriggerType } from "../services/sla-engine.js";
+import { useListNavigation } from "../hooks/useListNavigation.js";
 
 const REFRESH_INTERVAL_MS = 30_000;
 
@@ -40,8 +42,21 @@ export function SLABoard({ onNavigate }: Props) {
   const [escalations, setEscalations] = useState<Escalation[]>([]);
   const [adaptiveEscalations, setAdaptiveEscalations] = useState<AdaptiveEscalation[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedIndex, setSelectedIndex] = useState(0);
   const [refreshTick, setRefreshTick] = useState(0);
+
+  const totalItems = escalations.length + adaptiveEscalations.length;
+
+  const { selectedIndex } = useListNavigation({
+    itemCount: totalItems,
+    enabled: true,
+  });
+
+  const { setGlobalNavEnabled } = useContext(NavContext);
+
+  useEffect(() => {
+    setGlobalNavEnabled(false);
+    return () => setGlobalNavEnabled(true);
+  }, []);
 
   // Auto-refresh polling
   useEffect(() => {
@@ -66,14 +81,8 @@ export function SLABoard({ onNavigate }: Props) {
     load();
   }, [refreshTick]);
 
-  const totalItems = escalations.length + adaptiveEscalations.length;
-
   useInput((input, key) => {
-    if (key.upArrow) {
-      setSelectedIndex((i) => Math.max(0, i - 1));
-    } else if (key.downArrow) {
-      setSelectedIndex((i) => Math.min(totalItems - 1, i + 1));
-    } else if (input === "r") {
+    if (input === "r") {
       setRefreshTick((prev) => prev + 1);
     } else if (key.escape) {
       onNavigate("dashboard");

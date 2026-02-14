@@ -1,24 +1,24 @@
-import React, { useState, useEffect } from "react";
-import { Box, Text, useInput } from "ink";
+import { useState, useEffect } from "react";
+import { Box, Text } from "ink";
 import { AccountCard } from "./AccountCard.js";
 import { loadDashboardData, type DashboardAccountData } from "../application/use-cases/load-dashboard-data.js";
+import { useListNavigation } from "../hooks/useListNavigation.js";
 
-const VISIBLE_WINDOW = 8;
 const REFRESH_INTERVAL_MS = 30_000;
 
-interface Props {
-  onNavigate: (view: string) => void;
-}
-
-export function Dashboard({ onNavigate }: Props) {
+export function Dashboard() {
   const [accounts, setAccounts] = useState<DashboardAccountData[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [selectedIndex, setSelectedIndex] = useState(0);
   const [entireStatuses, setEntireStatuses] = useState<Map<string, string>>(new Map());
   const [unreadCounts, setUnreadCounts] = useState<Map<string, number>>(new Map());
   const [pairedSessions, setPairedSessions] = useState<Map<string, string>>(new Map());
   const [refreshTick, setRefreshTick] = useState(0);
+
+  const { selectedIndex, visibleRange, aboveCount, belowCount } = useListNavigation({
+    itemCount: accounts.length,
+    windowSize: 8,
+  });
 
   // Auto-refresh polling
   useEffect(() => {
@@ -45,24 +45,6 @@ export function Dashboard({ onNavigate }: Props) {
     load();
   }, [refreshTick]);
 
-  useInput((input, key) => {
-    if (key.upArrow) {
-      setSelectedIndex((prev) => Math.max(0, prev - 1));
-      return;
-    }
-    if (key.downArrow) {
-      setSelectedIndex((prev) => Math.min(accounts.length - 1, prev + 1));
-      return;
-    }
-    if (input === "d") onNavigate("dashboard");
-    if (input === "l") onNavigate("launcher");
-    if (input === "u") onNavigate("usage");
-    if (input === "t") onNavigate("tasks");
-    if (input === "a") onNavigate("add");
-    if (input === "m") onNavigate("inbox");
-    if (input === "q") process.exit(0);
-  });
-
   if (loading) return <Text color="gray">Loading accounts...</Text>;
 
   if (error) {
@@ -78,22 +60,13 @@ export function Dashboard({ onNavigate }: Props) {
       <Box flexDirection="column" paddingY={1}>
         <Text color="gray">No accounts configured.</Text>
         <Text color="gray">
-          Press [a] to add an account, or run: ch add {"<name>"}
+          Press [a] to add an account, or run: actl add {"<name>"}
         </Text>
       </Box>
     );
   }
 
-  // Calculate visible window based on selectedIndex
-  const scrollOffset = Math.max(
-    0,
-    Math.min(selectedIndex - Math.floor(VISIBLE_WINDOW / 2), accounts.length - VISIBLE_WINDOW)
-  );
-  const startIndex = Math.max(0, scrollOffset);
-  const endIndex = Math.min(accounts.length, startIndex + VISIBLE_WINDOW);
-  const visibleAccounts = accounts.slice(startIndex, endIndex);
-  const aboveCount = startIndex;
-  const belowCount = accounts.length - endIndex;
+  const visibleAccounts = accounts.slice(visibleRange.start, visibleRange.end);
 
   return (
     <Box flexDirection="column" paddingY={1}>
