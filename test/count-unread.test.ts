@@ -18,13 +18,13 @@ describe("count_unread handler", () => {
   let sockPath: string;
   const originalHubDir = process.env.AGENTCTL_DIR;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     process.env.AGENTCTL_DIR = TEST_DIR;
     mkdirSync(join(TEST_DIR, "tokens"), { recursive: true });
     writeFileSync(join(TEST_DIR, "tokens", "alice.token"), "alice-secret");
     writeFileSync(join(TEST_DIR, "tokens", "bob.token"), "bob-secret");
 
-    const result = startDaemon({
+    const result = await startDaemon({
       dbPath: uniqueDbPath(TEST_DIR),
       sockPath: join(TEST_DIR, `count-unread-${Date.now()}.sock`),
     });
@@ -95,7 +95,7 @@ describe("count_unread handler", () => {
   test("sockPath isolation: two daemons coexist", async () => {
     // Start a second daemon with a different sockPath
     const sockPath2 = join(TEST_DIR, `isolated-${Date.now()}.sock`);
-    const result2 = startDaemon({
+    const result2 = await startDaemon({
       dbPath: uniqueDbPath(TEST_DIR),
       sockPath: sockPath2,
     });

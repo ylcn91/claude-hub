@@ -1,6 +1,9 @@
 // F-02: Standardized Observability Event Taxonomy
 // Paper ref: Section 4.5 (Monitoring) — standardized observability events
 
+import type { VerificationReceipt } from "./verification-receipts";
+export type { VerificationReceipt };
+
 export interface TaskCharacteristics {
   complexity?: "low" | "medium" | "high" | "critical";
   criticality?: "low" | "medium" | "high" | "critical";
@@ -15,18 +18,6 @@ export interface ProgressData {
   blockers?: string[];
   estimatedRemainingMinutes?: number;
   artifactsProduced?: string[];
-}
-
-export interface VerificationReceipt {
-  taskId: string;
-  handoffId: string;
-  delegator: string;
-  delegatee: string;
-  specHash: string;
-  timestamp: string;
-  verificationMethod: "auto-test" | "human-review" | "council-review";
-  verdict: "accepted" | "rejected";
-  notes?: string;
 }
 
 // Discriminated union of all delegation lifecycle events

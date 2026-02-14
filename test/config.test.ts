@@ -6,15 +6,21 @@ import { join } from "path";
 const TEST_DIR = join(import.meta.dir, ".test-config");
 const TEST_CONFIG = join(TEST_DIR, "config.json");
 
-// Override HUB_DIR for tests
-process.env.AGENTCTL_DIR = TEST_DIR;
+let savedAgentctlDir: string | undefined;
 
 beforeEach(() => {
+  savedAgentctlDir = process.env.AGENTCTL_DIR;
+  process.env.AGENTCTL_DIR = TEST_DIR;
   mkdirSync(TEST_DIR, { recursive: true });
   mkdirSync(join(TEST_DIR, "tokens"), { recursive: true });
 });
 
 afterEach(() => {
+  if (savedAgentctlDir === undefined) {
+    delete process.env.AGENTCTL_DIR;
+  } else {
+    process.env.AGENTCTL_DIR = savedAgentctlDir;
+  }
   rmSync(TEST_DIR, { recursive: true, force: true });
 });
 

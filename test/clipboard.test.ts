@@ -4,10 +4,22 @@ import { mkdirSync, rmSync } from "fs";
 import { join } from "path";
 
 const TEST_DIR = join(import.meta.dir, ".test-clipboard");
-process.env.AGENTCTL_DIR = TEST_DIR;
 
-beforeEach(() => mkdirSync(TEST_DIR, { recursive: true }));
-afterEach(() => rmSync(TEST_DIR, { recursive: true, force: true }));
+let savedAgentctlDir: string | undefined;
+
+beforeEach(() => {
+  savedAgentctlDir = process.env.AGENTCTL_DIR;
+  process.env.AGENTCTL_DIR = TEST_DIR;
+  mkdirSync(TEST_DIR, { recursive: true });
+});
+afterEach(() => {
+  if (savedAgentctlDir === undefined) {
+    delete process.env.AGENTCTL_DIR;
+  } else {
+    process.env.AGENTCTL_DIR = savedAgentctlDir;
+  }
+  rmSync(TEST_DIR, { recursive: true, force: true });
+});
 
 describe("clipboard", () => {
   test("copy and paste roundtrip", async () => {

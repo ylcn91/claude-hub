@@ -7,20 +7,20 @@ import { App } from "./app.js";
 const cli = meow(
   `
   Usage
-    $ ch                    Open TUI dashboard
-    $ ch add <name>         Add new account
-    $ ch remove <name>      Remove account
-    $ ch rotate-token <name> Rotate account token
-    $ ch daemon start       Start hub daemon
-    $ ch daemon stop        Stop hub daemon
-    $ ch daemon status      Show daemon status
-    $ ch bridge --account   MCP bridge (internal)
-    $ ch launch <name> [dir]  Quick-launch account
-    $ ch config set <key> <value>  Set config value
-    $ ch status             Show account status
-    $ ch usage              Show usage table
-    $ ch list               List accounts
-    $ ch replay <session-id> Replay entire.io checkpoint
+    $ actl                    Open TUI dashboard
+    $ actl add <name>         Add new account
+    $ actl remove <name>      Remove account
+    $ actl rotate-token <name> Rotate account token
+    $ actl daemon start       Start hub daemon
+    $ actl daemon stop        Stop hub daemon
+    $ actl daemon status      Show daemon status
+    $ actl bridge --account   MCP bridge (internal)
+    $ actl launch <name> [dir]  Quick-launch account
+    $ actl config set <key> <value>  Set config value
+    $ actl status             Show account status
+    $ actl usage              Show usage table
+    $ actl list               List accounts
+    $ actl replay <session-id> Replay entire.io checkpoint
 
   Options
     --account  Account name (for bridge mode)
@@ -32,7 +32,7 @@ const cli = meow(
     --no-window  Print command instead of opening WezTerm (for launch)
     --bypass-permissions  Skip permission checks (for launch)
     --no-entire  Skip auto-enabling entire (for launch)
-    --provider  Provider type (claude-code, codex-cli, openhands, gemini-cli)
+    --provider  Provider type (claude-code, codex-cli, openhands, gemini-cli, opencode, cursor-agent)
 `,
   {
     importMeta: import.meta,
@@ -91,7 +91,7 @@ if (command === "daemon" && subcommand === "start") {
 } else if (command === "add") {
   const name = subcommand;
   if (!name) {
-    console.error("Usage: ch add <name>");
+    console.error("Usage: actl add <name>");
     process.exit(1);
   }
   const { setupAccount, addShellAlias, CATPPUCCIN_COLORS } = await import("./services/account-manager.js");
@@ -123,7 +123,7 @@ if (command === "daemon" && subcommand === "start") {
 } else if (command === "remove") {
   const name = subcommand;
   if (!name) {
-    console.error("Usage: ch remove <name>");
+    console.error("Usage: actl remove <name>");
     process.exit(1);
   }
   const { teardownAccount } = await import("./services/account-manager.js");
@@ -137,7 +137,7 @@ if (command === "daemon" && subcommand === "start") {
 } else if (command === "rotate-token") {
   const name = subcommand;
   if (!name) {
-    console.error("Usage: ch rotate-token <name>");
+    console.error("Usage: actl rotate-token <name>");
     process.exit(1);
   }
   const { rotateToken } = await import("./services/account-manager.js");
@@ -160,7 +160,7 @@ if (command === "daemon" && subcommand === "start") {
 } else if (command === "launch") {
   const name = subcommand;
   if (!name) {
-    console.error("Usage: ch launch <name> [dir]");
+    console.error("Usage: actl launch <name> [dir]");
     process.exit(1);
   }
   const dir = cli.input[2]; // optional third positional arg
@@ -189,7 +189,7 @@ if (command === "daemon" && subcommand === "start") {
 } else if (command === "find") {
   const pattern = subcommand;
   if (!pattern) {
-    console.error("Usage: ch find <pattern>");
+    console.error("Usage: actl find <pattern>");
     process.exit(1);
   }
   const { findCommand } = await import("./services/cli-commands.js");
@@ -201,7 +201,7 @@ if (command === "daemon" && subcommand === "start") {
   const { createLineParser, generateRequestId, frameSend } = await import("./daemon/framing.js");
   const sockPath = getSockPath();
   if (!existsSync(sockPath)) {
-    console.error("Daemon not running (no socket). Start with: ch daemon start");
+    console.error("Daemon not running (no socket). Start with: actl daemon start");
     process.exit(1);
   }
   try {
@@ -256,7 +256,7 @@ if (command === "daemon" && subcommand === "start") {
   const key = cli.input[2];
   const val = cli.input[3];
   if (!key || val === undefined) {
-    console.error("Usage: ch config set <key> <value>");
+    console.error("Usage: actl config set <key> <value>");
     process.exit(1);
   }
   const { setConfigValue } = await import("./config.js");
@@ -270,7 +270,7 @@ if (command === "daemon" && subcommand === "start") {
 } else if (command === "search") {
   const pattern = subcommand;
   if (!pattern) {
-    console.error("Usage: ch search <pattern>");
+    console.error("Usage: actl search <pattern>");
     process.exit(1);
   }
   const { searchCommand } = await import("./services/cli-commands.js");
@@ -291,7 +291,7 @@ if (command === "daemon" && subcommand === "start") {
 } else if (command === "replay") {
   const sessionId = subcommand;
   if (!sessionId) {
-    console.error("Usage: ch replay <session-id> [--json]");
+    console.error("Usage: actl replay <session-id> [--json]");
     process.exit(1);
   }
   const { replayCommand } = await import("./services/cli-commands.js");
@@ -305,7 +305,7 @@ if (command === "daemon" && subcommand === "start") {
   const sessionId = cli.input[2];
   const name = cli.input[3];
   if (!sessionId || !name) {
-    console.error("Usage: ch session name <session-id> <name>");
+    console.error("Usage: actl session name <session-id> <name>");
     process.exit(1);
   }
   const { SessionStore } = await import("./daemon/session-store.js");
@@ -334,7 +334,7 @@ if (command === "daemon" && subcommand === "start") {
     } else {
       const sessions = store.list();
       if (sessions.length === 0) {
-        console.log("No named sessions. Use: ch session name <id> <name>");
+        console.log("No named sessions. Use: actl session name <id> <name>");
       } else {
         for (const s of sessions) {
           console.log(`${s.id}  ${s.name}  (${s.account})  ${s.startedAt}`);

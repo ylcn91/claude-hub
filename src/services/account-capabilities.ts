@@ -1,3 +1,5 @@
+import { calculateProviderFit, getProviderProfile } from "./provider-profiles";
+
 export interface AccountCapability {
   accountName: string;
   skills: string[];
@@ -19,10 +21,21 @@ export const PROVIDER_STRENGTHS: Record<string, string[]> = {
   'cursor-agent':  ['frontend', 'react', 'css', 'ui-design', 'visual-tasks'],
 };
 
+export interface ScoreBreakdown {
+  skillMatch: number;
+  providerFit: number;
+  successRate: number;
+  speed: number;
+  workload: number;
+  trust: number;
+  recency: number;
+}
+
 export interface RoutingScore {
   accountName: string;
   score: number;
   reasons: string[];
+  breakdown?: ScoreBreakdown;
 }
 
 export function scoreAccount(
@@ -48,48 +61,62 @@ export function scoreAccount(
     );
   }
 
-  // Success rate: 25 points
+  // Provider fit: 20 points — use provider-profiles for fit calculation
+  let providerFitPoints: number;
+  if (requiredSkills.length > 0 && capability.providerType) {
+    const profile = getProviderProfile(capability.providerType);
+    if (profile) {
+      const fitPercent = calculateProviderFit(capability.providerType, requiredSkills);
+      providerFitPoints = (fitPercent / 100) * 20;
+      const matchCount = requiredSkills.filter((s) => profile.strengths.includes(s)).length;
+      reasons.push(
+        `provider fit: ${matchCount}/${requiredSkills.length} strengths (${Math.round(providerFitPoints)}pts)`
+      );
+    } else if (PROVIDER_STRENGTHS[capability.providerType]) {
+      // Fallback to legacy PROVIDER_STRENGTHS for providers not in profiles
+      const strengths = PROVIDER_STRENGTHS[capability.providerType];
+      const matchingProviderSkills = requiredSkills.filter((s) => strengths.includes(s)).length;
+      providerFitPoints = (matchingProviderSkills / requiredSkills.length) * 20;
+      reasons.push(
+        `provider fit: ${matchingProviderSkills}/${requiredSkills.length} strengths (${Math.round(providerFitPoints)}pts)`
+      );
+    } else {
+      providerFitPoints = 10;
+      reasons.push("provider fit: neutral (10pts)");
+    }
+  } else {
+    providerFitPoints = 10;
+    reasons.push("provider fit: neutral (10pts)");
+  }
+
+  // Success rate: 20 points
   let successPoints: number;
   if (capability.totalTasks === 0) {
-    successPoints = 13;
-    reasons.push("success rate: no history (13pts)");
+    successPoints = 10;
+    reasons.push("success rate: no history (10pts)");
   } else {
-    successPoints = (capability.acceptedTasks / capability.totalTasks) * 25;
+    successPoints = (capability.acceptedTasks / capability.totalTasks) * 20;
     const rate = Math.round(
       (capability.acceptedTasks / capability.totalTasks) * 100
     );
     reasons.push(`success rate: ${rate}% (${Math.round(successPoints)}pts)`);
   }
 
-  // Provider fit: 20 points
-  let providerFitPoints: number;
-  if (requiredSkills.length > 0 && capability.providerType && PROVIDER_STRENGTHS[capability.providerType]) {
-    const strengths = PROVIDER_STRENGTHS[capability.providerType];
-    const matchingProviderSkills = requiredSkills.filter((s) => strengths.includes(s)).length;
-    providerFitPoints = (matchingProviderSkills / requiredSkills.length) * 20;
-    reasons.push(
-      `provider fit: ${matchingProviderSkills}/${requiredSkills.length} strengths (${Math.round(providerFitPoints)}pts)`
-    );
-  } else {
-    providerFitPoints = 10;
-    reasons.push("provider fit: neutral (10pts)");
-  }
-
-  // Speed: 10 points
+  // Speed: 15 points
   let speedPoints: number;
   if (capability.avgDeliveryMs === 0) {
-    speedPoints = 5;
-    reasons.push("speed: no data (5pts)");
+    speedPoints = 8;
+    reasons.push("speed: no data (8pts)");
   } else {
     const mins = capability.avgDeliveryMs / 60_000;
     if (mins < 5) {
-      speedPoints = 10;
+      speedPoints = 15;
     } else if (mins < 15) {
-      speedPoints = 8;
+      speedPoints = 12;
     } else if (mins < 30) {
-      speedPoints = 5;
+      speedPoints = 8;
     } else {
-      speedPoints = 2;
+      speedPoints = 3;
     }
     reasons.push(`speed: ${Math.round(mins)}min avg (${speedPoints}pts)`);
   }
@@ -124,9 +151,19 @@ export function scoreAccount(
     reasons.push(`workload modifier: ${wlMod > 0 ? "+" : ""}${wlMod}pts`);
   }
 
-  const score = Math.max(0, Math.round(skillPoints + successPoints + providerFitPoints + speedPoints + trustPoints + recencyPoints + wlMod));
+  const score = Math.max(0, Math.round(skillPoints + providerFitPoints + successPoints + speedPoints + trustPoints + recencyPoints + wlMod));
 
-  return { accountName: capability.accountName, score, reasons };
+  const breakdown: ScoreBreakdown = {
+    skillMatch: Math.round(skillPoints),
+    providerFit: Math.round(providerFitPoints),
+    successRate: Math.round(successPoints),
+    speed: speedPoints,
+    workload: wlMod,
+    trust: Math.round(trustPoints),
+    recency: recencyPoints,
+  };
+
+  return { accountName: capability.accountName, score, reasons, breakdown };
 }
 
 export function rankAccounts(

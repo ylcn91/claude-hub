@@ -14,13 +14,16 @@ import {
   type TaskBoard as TaskBoardData,
   type TaskStatus,
 } from "../services/tasks.js";
+import { getGatedAcceptanceAction } from "../services/cognitive-friction.js";
+import { calculateProviderFit } from "../services/provider-profiles.js";
+import type { HandoffPayload } from "../services/handoff.js";
 
 interface Props {
   onNavigate: (view: string) => void;
   accounts?: string[];
 }
 
-type Mode = "browse" | "add" | "assign" | "reject";
+type Mode = "browse" | "add" | "assign" | "reject" | "justify";
 
 const STATUS_ORDER: TaskStatus[] = ["todo", "in_progress", "ready_for_review", "accepted", "rejected"];
 const STATUS_COLORS: Record<TaskStatus, string> = {
@@ -46,6 +49,7 @@ export function TaskBoard({ onNavigate, accounts = [] }: Props) {
   const [inputBuffer, setInputBuffer] = useState("");
   const [assignIndex, setAssignIndex] = useState(0);
   const [sortByPrio, setSortByPrio] = useState(false);
+  const [frictionMessage, setFrictionMessage] = useState<{ text: string; color: string } | null>(null);
 
   useEffect(() => {
     loadTasks().then((b) => {
@@ -109,6 +113,31 @@ export function TaskBoard({ onNavigate, accounts = [] }: Props) {
       return;
     }
 
+    if (mode === "justify") {
+      if (key.return) {
+        if (inputBuffer.trim()) {
+          const task = flatTasks[selectedIndex];
+          if (task) {
+            try {
+              const newBoard = acceptTask(board, task.id, inputBuffer.trim());
+              persist(newBoard);
+              setFrictionMessage({ text: "Accepted with justification", color: "green" });
+            } catch (e: any) { console.error("[taskboard]", e.message); }
+          }
+        }
+        setInputBuffer("");
+        setMode("browse");
+      } else if (key.escape) {
+        setInputBuffer("");
+        setMode("browse");
+      } else if (key.backspace || key.delete) {
+        setInputBuffer((b) => b.slice(0, -1));
+      } else if (input && !key.ctrl && !key.meta) {
+        setInputBuffer((b) => b + input);
+      }
+      return;
+    }
+
     if (mode === "assign") {
       if (key.return && accounts.length > 0) {
         const task = flatTasks[selectedIndex];
@@ -155,13 +184,44 @@ export function TaskBoard({ onNavigate, accounts = [] }: Props) {
         } catch(e: any) { console.error("[taskboard]", e.message) }
       }
     } else if (input === "v" && flatTasks[selectedIndex]) {
-      // Accept task (only valid on ready_for_review)
+      // Accept task with friction gate check (only valid on ready_for_review)
       const task = flatTasks[selectedIndex];
       if (task.status === "ready_for_review") {
-        try {
-          const newBoard = acceptTask(board, task.id);
-          persist(newBoard);
-        } catch(e: any) { console.error("[taskboard]", e.message) }
+        // Build a minimal HandoffPayload from task tags for gate check
+        const taskTags = task.tags ?? [];
+        const payload: Partial<HandoffPayload> = {
+          goal: task.title,
+          acceptance_criteria: [],
+          run_commands: [],
+          blocked_by: [],
+        };
+        for (const tag of taskTags) {
+          if (tag.startsWith("criticality:")) payload.criticality = tag.split(":")[1] as any;
+          if (tag.startsWith("reversibility:")) payload.reversibility = tag.split(":")[1] as any;
+          if (tag.startsWith("verifiability:")) payload.verifiability = tag.split(":")[1] as any;
+        }
+
+        const gateResult = getGatedAcceptanceAction(payload as HandoffPayload);
+
+        if (gateResult.action === "auto-accept") {
+          try {
+            const newBoard = acceptTask(board, task.id);
+            persist(newBoard);
+            setFrictionMessage({ text: "Auto-accepted", color: "green" });
+            setTimeout(() => setFrictionMessage(null), 3000);
+          } catch (e: any) { console.error("[taskboard]", e.message); }
+        } else if (gateResult.action === "require-acceptance") {
+          try {
+            const newBoard = acceptTask(board, task.id);
+            persist(newBoard);
+          } catch (e: any) { console.error("[taskboard]", e.message); }
+        } else if (gateResult.action === "require-justification") {
+          setInputBuffer("");
+          setMode("justify");
+        } else if (gateResult.action === "require-elevated-review") {
+          setFrictionMessage({ text: `BLOCKED: ${gateResult.reason}`, color: "red" });
+          setTimeout(() => setFrictionMessage(null), 5000);
+        }
       }
     } else if (input === "x" && flatTasks[selectedIndex]) {
       // Reject task (only valid on ready_for_review)
@@ -199,6 +259,20 @@ export function TaskBoard({ onNavigate, accounts = [] }: Props) {
           <Text color="red">Rejection reason: </Text>
           <Text>{inputBuffer}</Text>
           <Text color="gray">_</Text>
+        </Box>
+      )}
+
+      {mode === "justify" && (
+        <Box marginBottom={1}>
+          <Text color="yellow">Justification required: </Text>
+          <Text>{inputBuffer}</Text>
+          <Text color="gray">_</Text>
+        </Box>
+      )}
+
+      {frictionMessage && (
+        <Box marginBottom={1}>
+          <Text color={frictionMessage.color}>{frictionMessage.text}</Text>
         </Box>
       )}
 
@@ -242,18 +316,31 @@ export function TaskBoard({ onNavigate, accounts = [] }: Props) {
         );
       })}
 
-      {mode === "assign" && flatTasks[selectedIndex] && (
-        <Box flexDirection="column" marginTop={1}>
-          <Text bold color="cyan">Assign to:</Text>
-          {accounts.map((acct, i) => (
-            <Box key={acct} marginLeft={2}>
-              <Text color={i === assignIndex ? "white" : "gray"}>
-                {i === assignIndex ? "> " : "  "}{acct}
-              </Text>
-            </Box>
-          ))}
-        </Box>
-      )}
+      {mode === "assign" && flatTasks[selectedIndex] && (() => {
+        const task = flatTasks[selectedIndex];
+        const requiredSkills = (task.tags ?? [])
+          .filter((t) => t.startsWith("skill:"))
+          .map((t) => t.split(":")[1]);
+        return (
+          <Box flexDirection="column" marginTop={1}>
+            <Text bold color="cyan">Assign to:</Text>
+            {accounts.map((acct, i) => {
+              const fitScore = calculateProviderFit(acct, requiredSkills);
+              const scoreColor = fitScore > 70 ? "green" : fitScore >= 40 ? "yellow" : "red";
+              return (
+                <Box key={acct} marginLeft={2}>
+                  <Text color={i === assignIndex ? "white" : "gray"}>
+                    {i === assignIndex ? "> " : "  "}{acct}
+                  </Text>
+                  {requiredSkills.length > 0 && (
+                    <Text color={scoreColor}> ({fitScore}%)</Text>
+                  )}
+                </Box>
+              );
+            })}
+          </Box>
+        );
+      })()}
     </Box>
   );
 }

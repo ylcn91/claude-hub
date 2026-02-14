@@ -878,4 +878,57 @@ export function registerTools(server: McpServer, sendToDaemon: DaemonSender, acc
     const result = await sendToDaemon({ type: "adaptive_sla_check" });
     return { content: [{ type: "text" as const, text: JSON.stringify(result) }] };
   });
+
+  // ── Phase 6: Council Verification Tool ──
+
+  server.registerTool("verify_task", {
+    description: "Run multi-LLM council verification on a completed task. Multiple models independently review the diff against goal and acceptance criteria, then a chairman produces a final verdict (ACCEPT/REJECT/ACCEPT_WITH_NOTES). Feature gated on council.",
+    inputSchema: {
+      taskId: z.string().describe("Task ID to verify"),
+      goal: z.string().describe("Task goal"),
+      acceptance_criteria: z.array(z.string()).describe("Acceptance criteria to verify against"),
+      diff: z.string().optional().describe("Git diff of changes"),
+      testResults: z.string().optional().describe("Test execution results"),
+      filesChanged: z.array(z.string()).optional().describe("List of changed files"),
+      riskNotes: z.array(z.string()).optional().describe("Risk assessment notes"),
+    },
+  }, async (args) => {
+    // Feature gate: council must be enabled
+    const { loadConfig } = await import("../config.js");
+    const config = await loadConfig();
+    if (!config.features?.council) {
+      return { content: [{ type: "text" as const, text: JSON.stringify({ error: "Council feature is not enabled. Set features.council = true in config." }) }] };
+    }
+
+    const { verifyTaskCompletion, needsCouncilVerification } = await import("../services/verification-council.js");
+    const { createOpenRouterCaller } = await import("../services/council.js");
+
+    const apiKey = config.council?.apiKey ?? process.env.OPENROUTER_API_KEY;
+    if (!apiKey) {
+      return { content: [{ type: "text" as const, text: JSON.stringify({ error: "Council verification requires an OpenRouter API key" }) }] };
+    }
+
+    const llmCaller = createOpenRouterCaller(apiKey);
+
+    const result = await verifyTaskCompletion(
+      args.taskId,
+      {
+        diff: args.diff,
+        testResults: args.testResults,
+        filesChanged: args.filesChanged,
+        riskNotes: args.riskNotes,
+      },
+      {
+        goal: args.goal,
+        acceptance_criteria: args.acceptance_criteria,
+      },
+      {
+        models: config.council?.models,
+        chairman: config.council?.chairman,
+        llmCaller,
+      },
+    );
+
+    return { content: [{ type: "text" as const, text: JSON.stringify(result) }] };
+  });
 }

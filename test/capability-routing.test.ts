@@ -51,46 +51,50 @@ describe("scoreAccount", () => {
     expect(result.reasons[0]).toContain("30pts");
   });
 
-  test("high success rate gives near 25 points", () => {
+  test("high success rate gives near 20 points", () => {
     const cap = makeCapability({ totalTasks: 100, acceptedTasks: 95, rejectedTasks: 5 });
     const result = scoreAccount(cap, []);
-    expect(result.reasons[1]).toContain("95%");
-    // 95% of 25 = 23.75 -> rounds to 24
-    expect(result.reasons[1]).toContain("24pts");
+    const successReason = result.reasons.find((r) => r.startsWith("success rate:"));
+    expect(successReason).toContain("95%");
+    // 95% of 20 = 19
+    expect(successReason).toContain("19pts");
   });
 
-  test("zero tasks (cold start) gives neutral 13 points", () => {
+  test("zero tasks (cold start) gives neutral 10 points", () => {
     const cap = makeCapability({ totalTasks: 0, acceptedTasks: 0, rejectedTasks: 0 });
     const result = scoreAccount(cap, []);
-    expect(result.reasons[1]).toContain("no history");
-    expect(result.reasons[1]).toContain("13pts");
+    const successReason = result.reasons.find((r) => r.startsWith("success rate:"));
+    expect(successReason).toContain("no history");
+    expect(successReason).toContain("10pts");
   });
 
-  test("fast delivery gives 10 speed points", () => {
+  test("fast delivery gives 15 speed points", () => {
     const cap = makeCapability({ avgDeliveryMs: 120_000 }); // 2 min
     const result = scoreAccount(cap, []);
-    // reasons[2] is provider fit, reasons[3] is speed
-    expect(result.reasons[3]).toContain("10pts");
+    const speedReason = result.reasons.find((r) => r.startsWith("speed:"));
+    expect(speedReason).toContain("15pts");
   });
 
   test("slow delivery gives low speed points", () => {
     const cap = makeCapability({ avgDeliveryMs: 3_600_000 }); // 60 min
     const result = scoreAccount(cap, []);
-    expect(result.reasons[3]).toContain("2pts");
+    const speedReason = result.reasons.find((r) => r.startsWith("speed:"));
+    expect(speedReason).toContain("3pts");
   });
 
   test("recently active gives 5 recency points", () => {
     const cap = makeCapability({ lastActiveAt: new Date().toISOString() });
     const result = scoreAccount(cap, []);
-    // reasons[5] is recency (after skill, success, provider fit, speed, trust)
-    expect(result.reasons[5]).toContain("5pts");
+    const recencyReason = result.reasons.find((r) => r.startsWith("recency:"));
+    expect(recencyReason).toContain("5pts");
   });
 
   test("inactive over 1hr gives low recency points", () => {
     const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
     const cap = makeCapability({ lastActiveAt: twoHoursAgo });
     const result = scoreAccount(cap, []);
-    expect(result.reasons[5]).toContain("1pts");
+    const recencyReason = result.reasons.find((r) => r.startsWith("recency:"));
+    expect(recencyReason).toContain("1pts");
   });
 });
 

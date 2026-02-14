@@ -12,6 +12,7 @@ interface CapabilityRow {
   rejected_tasks: number;
   avg_delivery_ms: number;
   last_active_at: string;
+  provider_type: string | null;
 }
 
 export class CapabilityStore extends BaseStore {
@@ -28,23 +29,24 @@ export class CapabilityStore extends BaseStore {
         accepted_tasks INTEGER NOT NULL DEFAULT 0,
         rejected_tasks INTEGER NOT NULL DEFAULT 0,
         avg_delivery_ms REAL NOT NULL DEFAULT 0,
-        last_active_at TEXT NOT NULL
+        last_active_at TEXT NOT NULL,
+        provider_type TEXT
       )
     `);
   }
 
   upsert(cap: AccountCapability): void {
-    this.db.run(
-      `INSERT OR REPLACE INTO account_capabilities (account_name, skills, total_tasks, accepted_tasks, rejected_tasks, avg_delivery_ms, last_active_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [
-        cap.accountName,
-        JSON.stringify(cap.skills),
-        cap.totalTasks,
-        cap.acceptedTasks,
-        cap.rejectedTasks,
-        cap.avgDeliveryMs,
-        cap.lastActiveAt,
-      ]
+    this.db.prepare(
+      `INSERT OR REPLACE INTO account_capabilities (account_name, skills, total_tasks, accepted_tasks, rejected_tasks, avg_delivery_ms, last_active_at, provider_type) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run(
+      cap.accountName,
+      JSON.stringify(cap.skills),
+      cap.totalTasks,
+      cap.acceptedTasks,
+      cap.rejectedTasks,
+      cap.avgDeliveryMs,
+      cap.lastActiveAt,
+      cap.providerType ?? null,
     );
   }
 
@@ -77,31 +79,28 @@ export class CapabilityStore extends BaseStore {
     const newAvg =
       (existing.avgDeliveryMs * existing.totalTasks + deliveryMs) / newTotal;
 
-    this.db.run(
-      `UPDATE account_capabilities SET total_tasks = ?, accepted_tasks = ?, rejected_tasks = ?, avg_delivery_ms = ?, last_active_at = ? WHERE account_name = ?`,
-      [
-        newTotal,
-        newAccepted,
-        newRejected,
-        newAvg,
-        new Date().toISOString(),
-        accountName,
-      ]
+    this.db.prepare(
+      `UPDATE account_capabilities SET total_tasks = ?, accepted_tasks = ?, rejected_tasks = ?, avg_delivery_ms = ?, last_active_at = ? WHERE account_name = ?`
+    ).run(
+      newTotal,
+      newAccepted,
+      newRejected,
+      newAvg,
+      new Date().toISOString(),
+      accountName,
     );
   }
 
   updateSkills(accountName: string, skills: string[]): void {
-    this.db.run(
-      `UPDATE account_capabilities SET skills = ? WHERE account_name = ?`,
-      [JSON.stringify(skills), accountName]
-    );
+    this.db.prepare(
+      `UPDATE account_capabilities SET skills = ? WHERE account_name = ?`
+    ).run(JSON.stringify(skills), accountName);
   }
 
   touchActive(accountName: string): void {
-    this.db.run(
-      `UPDATE account_capabilities SET last_active_at = ? WHERE account_name = ?`,
-      [new Date().toISOString(), accountName]
-    );
+    this.db.prepare(
+      `UPDATE account_capabilities SET last_active_at = ? WHERE account_name = ?`
+    ).run(new Date().toISOString(), accountName);
   }
 
   private deserialize(row: CapabilityRow): AccountCapability {
@@ -113,6 +112,7 @@ export class CapabilityStore extends BaseStore {
       rejectedTasks: row.rejected_tasks,
       avgDeliveryMs: row.avg_delivery_ms,
       lastActiveAt: row.last_active_at,
+      providerType: row.provider_type ?? undefined,
     };
   }
 }

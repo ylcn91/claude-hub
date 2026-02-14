@@ -87,3 +87,7 @@ export function getSessionsDbPath(): string {
 export function getTrustDbPath(): string {
   return `${getHubDir()}/trust.db`;
 }
+
+export function getReceiptKeyPath(): string {
+  return `${getHubDir()}/receipt.key`;
+}

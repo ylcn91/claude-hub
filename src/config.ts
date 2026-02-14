@@ -49,6 +49,18 @@ const HubConfigSchema = z.object({
     workflow: z.boolean().optional(),
     retro: z.boolean().optional(),
     sessions: z.boolean().optional(),
+    trust: z.boolean().optional(),
+    council: z.boolean().optional(),
+    circuitBreaker: z.boolean().optional(),
+    cognitiveFriction: z.boolean().optional(),
+  }).optional(),
+  council: z.object({
+    models: z.array(z.string()),
+    chairman: z.string(),
+    apiKey: z.string().optional(),
+  }).optional(),
+  delegationDepth: z.object({
+    maxDepth: z.number().int().min(1).optional(),
   }).optional(),
   github: z.object({
     enabled: z.boolean(),
@@ -83,6 +95,8 @@ export async function loadConfig(path?: string): Promise<HubConfig> {
     features: (raw.features as FeatureFlags) ?? undefined,
     notifications: (raw.notifications as HubConfig["notifications"]) ?? undefined,
     github: (raw.github as HubConfig["github"]) ?? undefined,
+    council: (raw.council as HubConfig["council"]) ?? undefined,
+    delegationDepth: (raw.delegationDepth as HubConfig["delegationDepth"]) ?? undefined,
     defaults: {
       launchInNewWindow: (rawDefaults?.launchInNewWindow as boolean) ?? DEFAULT_CONFIG.defaults.launchInNewWindow,
       quotaPolicy: {

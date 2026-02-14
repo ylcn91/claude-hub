@@ -128,10 +128,10 @@ export class WorkflowStore extends BaseStore {
 
   updateStepRun(id: string, updates: Partial<Pick<WorkflowStepRun, "status" | "assigned_to" | "task_id" | "handoff_id" | "started_at" | "completed_at" | "attempt" | "result">>): void {
     const fields: string[] = [];
-    const values: unknown[] = [];
+    const values: (string | number | null)[] = [];
     for (const [key, value] of Object.entries(updates)) {
       fields.push(`${key} = ?`);
-      values.push(value);
+      values.push(value as string | number | null);
     }
     if (fields.length === 0) return;
     values.push(id);

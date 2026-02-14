@@ -30,12 +30,45 @@ export interface FeatureFlags {
   retro?: boolean;
   sessions?: boolean;
   trust?: boolean;
+  council?: boolean;
+  circuitBreaker?: boolean;
+  cognitiveFriction?: boolean;
+  entireMonitoring?: boolean;
 }
 
 export interface GitHubConfig {
   enabled: boolean;
   defaultOwner?: string;
   defaultRepo?: string;
+}
+
+export interface CouncilConfig {
+  models: string[];
+  chairman: string;
+  apiKey?: string;
+}
+
+// Council analysis result types
+export interface CouncilResponse {
+  model: string;
+  complexity: "low" | "medium" | "high" | "critical";
+  estimatedDurationMinutes: number;
+  requiredSkills: string[];
+  recommendedApproach: string;
+  risks: string[];
+  suggestedProvider?: string;
+}
+
+export interface CouncilRanking {
+  reviewer: string;
+  ranking: number[];
+  reasoning: string;
+}
+
+export interface AggregateRank {
+  model: string;
+  averageRank: number;
+  rankCount: number;
 }
 
 export interface HubConfig {
@@ -53,9 +86,12 @@ export interface HubConfig {
   };
   features?: FeatureFlags;
   github?: GitHubConfig;
+  council?: CouncilConfig;
+  delegationDepth?: { maxDepth?: number };
   defaults: {
     launchInNewWindow: boolean;
     quotaPolicy: QuotaPolicyConfig;
+    maxDelegationDepth?: number;
   };
 }
 

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Box, Text, useInput } from "ink";
+import type { EntireRetroEvidence } from "../services/retro-engine.js";
 
 interface WorkflowRun {
   id: string;
@@ -37,6 +38,7 @@ const STEP_STATUS_COLORS: Record<string, string> = {
 export function WorkflowDetail({ runId, onNavigate }: Props) {
   const [run, setRun] = useState<WorkflowRun | null>(null);
   const [steps, setSteps] = useState<StepRun[]>([]);
+  const [evidence, setEvidence] = useState<EntireRetroEvidence[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -51,6 +53,17 @@ export function WorkflowDetail({ runId, onNavigate }: Props) {
           setSteps(store.getStepRunsForRun(runId));
         }
         store.close();
+
+        // Load entire.io evidence if available
+        try {
+          const { atomicRead } = await import("../services/file-store.js");
+          const { getHubDir } = await import("../paths.js");
+          const evidencePath = `${getHubDir()}/retro-evidence-${runId}.json`;
+          const raw = await atomicRead(evidencePath);
+          if (raw) setEvidence(JSON.parse(raw));
+        } catch {
+          // Evidence not available — that's fine
+        }
       } catch {
         // DB not available
       }
@@ -117,6 +130,35 @@ export function WorkflowDetail({ runId, onNavigate }: Props) {
           </Box>
         );
       })}
+      {evidence.length > 0 && (
+        <Box flexDirection="column" marginTop={1}>
+          <Box marginBottom={1}>
+            <Text bold color="magenta">Entire.io Evidence</Text>
+          </Box>
+          <Box marginLeft={2} flexDirection="column">
+            <Box>
+              <Text color="gray" bold>{"Participant".padEnd(16)}</Text>
+              <Text color="gray" bold>{"Tokens".padEnd(10)}</Text>
+              <Text color="gray" bold>{"Burn Rate".padEnd(12)}</Text>
+              <Text color="gray" bold>{"Files".padEnd(8)}</Text>
+              <Text color="gray" bold>{"Checkpoints".padEnd(14)}</Text>
+              <Text color="gray" bold>Duration</Text>
+            </Box>
+            {evidence.map((ev) => (
+              <Box key={ev.sessionId}>
+                <Text>{ev.participant.padEnd(16)}</Text>
+                <Text color="cyan">{String(ev.totalTokens).padEnd(10)}</Text>
+                <Text color={ev.tokenBurnRate > 2000 ? "red" : ev.tokenBurnRate > 1000 ? "yellow" : "green"}>
+                  {`${ev.tokenBurnRate}/min`.padEnd(12)}
+                </Text>
+                <Text>{String(ev.filesModified).padEnd(8)}</Text>
+                <Text>{String(ev.checkpointCount).padEnd(14)}</Text>
+                <Text color="gray">{ev.durationMinutes}m</Text>
+              </Box>
+            ))}
+          </Box>
+        </Box>
+      )}
     </Box>
   );
 }

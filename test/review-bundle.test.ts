@@ -7,14 +7,20 @@ import type { ReviewBundle } from "../src/services/review-bundle";
 
 const TEST_DIR = join(import.meta.dir, ".test-review-bundle");
 
-// Override HUB_DIR for tests
-process.env.AGENTCTL_DIR = TEST_DIR;
+let savedAgentctlDir: string | undefined;
 
 beforeEach(() => {
+  savedAgentctlDir = process.env.AGENTCTL_DIR;
+  process.env.AGENTCTL_DIR = TEST_DIR;
   mkdirSync(TEST_DIR, { recursive: true });
 });
 
 afterEach(() => {
+  if (savedAgentctlDir === undefined) {
+    delete process.env.AGENTCTL_DIR;
+  } else {
+    process.env.AGENTCTL_DIR = savedAgentctlDir;
+  }
   rmSync(TEST_DIR, { recursive: true, force: true });
 });
 

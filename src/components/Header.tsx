@@ -61,6 +61,14 @@ export function Header({ view, showMascot }: { view: string; showMascot?: boolea
         <Text> </Text>
         <Text color={view === "prompts" ? "cyan" : "gray"}>[r]prompts</Text>
         <Text> </Text>
+        <Text color={view === "council" ? "cyan" : "gray"}>[c]ouncil</Text>
+        <Text> </Text>
+        <Text color={view === "verify" ? "cyan" : "gray"}>[v]erify</Text>
+        <Text> </Text>
+        <Text color={view === "entire" ? "cyan" : "gray"}>[i]entire</Text>
+        <Text> </Text>
+        <Text color={view === "chains" ? "cyan" : "gray"}>[g]chains</Text>
+        <Text> </Text>
         <Text color="gray">[a]dd [q]uit</Text>
       </Box>
     </Box>

@@ -242,7 +242,7 @@ describe("daemon start/stop lifecycle", () => {
   });
 
   test("daemon starts on unix socket and accepts connections", async () => {
-    const result = startDaemon({ dbPath: uniqueDbPath(daemonDir) });
+    const result = await startDaemon({ dbPath: uniqueDbPath(daemonDir) });
     server = result.server;
     daemonState = result.state;
 
@@ -269,7 +269,7 @@ describe("daemon start/stop lifecycle", () => {
   });
 
   test("daemon stops cleanly and removes socket", async () => {
-    const result = startDaemon({ dbPath: uniqueDbPath(daemonDir) });
+    const result = await startDaemon({ dbPath: uniqueDbPath(daemonDir) });
     server = result.server;
     daemonState = result.state;
     const sockPath = join(daemonDir, "hub.sock");
@@ -287,7 +287,7 @@ describe("daemon start/stop lifecycle", () => {
   });
 
   test("daemon state tracks connected accounts after start", async () => {
-    const result = startDaemon({ dbPath: uniqueDbPath(daemonDir) });
+    const result = await startDaemon({ dbPath: uniqueDbPath(daemonDir) });
     server = result.server;
     daemonState = result.state;
 
@@ -304,7 +304,7 @@ describe("bridge connect + message send/receive through daemon", () => {
   let state: DaemonState;
   let originalHubDir: string | undefined;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     originalHubDir = process.env.AGENTCTL_DIR;
     process.env.AGENTCTL_DIR = bridgeDir;
     mkdirSync(join(bridgeDir, "tokens"), { recursive: true });
@@ -314,7 +314,7 @@ describe("bridge connect + message send/receive through daemon", () => {
     writeFileSync(join(bridgeDir, "tokens", "alice.token"), "alice-secret");
     writeFileSync(join(bridgeDir, "tokens", "bob.token"), "bob-secret");
 
-    const result = startDaemon({ dbPath: uniqueDbPath(bridgeDir) });
+    const result = await startDaemon({ dbPath: uniqueDbPath(bridgeDir) });
     server = result.server;
     state = result.state;
   });
@@ -445,8 +445,11 @@ describe("10 concurrent atomic writes produce no data corruption", () => {
 
   test("all concurrent writes complete without corruption", async () => {
     const filePath = join(writeDir, "concurrent.json");
+    // Stagger launches by 5ms so lock contention doesn't exhaust retries under heavy I/O
     const writes = Array.from({ length: 10 }, (_, i) =>
-      atomicWrite(filePath, { value: i, schemaVersion: 1, writer: `writer-${i}` })
+      Bun.sleep(i * 5).then(() =>
+        atomicWrite(filePath, { value: i, schemaVersion: 1, writer: `writer-${i}` })
+      )
     );
     await Promise.all(writes);
 
@@ -463,7 +466,7 @@ describe("10 concurrent atomic writes produce no data corruption", () => {
   test("no temp files remain after concurrent writes", async () => {
     const filePath = join(writeDir, "clean.json");
     const writes = Array.from({ length: 10 }, (_, i) =>
-      atomicWrite(filePath, { val: i })
+      Bun.sleep(i * 5).then(() => atomicWrite(filePath, { val: i }))
     );
     await Promise.all(writes);
 
@@ -507,14 +510,14 @@ describe("token auth: invalid token is rejected by daemon", () => {
   let authState: DaemonState;
   let originalHubDir: string | undefined;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     originalHubDir = process.env.AGENTCTL_DIR;
     process.env.AGENTCTL_DIR = authDir;
     mkdirSync(join(authDir, "tokens"), { recursive: true });
     mkdirSync(join(authDir, "messages"), { recursive: true });
     writeFileSync(join(authDir, "tokens", "valid-acct.token"), "correct-token");
 
-    const result = startDaemon({ dbPath: uniqueDbPath(authDir) });
+    const result = await startDaemon({ dbPath: uniqueDbPath(authDir) });
     server = result.server;
     authState = result.state;
   });

@@ -33,3 +33,7 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 # Finder (MacOS) folder config
 .DS_Store
 docs/plans/
+docs/existing-features.md
+docs/new-features.md
+docs/paper-analysis.md
+*.pdf

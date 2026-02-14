@@ -33,9 +33,9 @@ actl daemon start             # enable inter-agent communication
 - **Prompt library** — save, search, and reuse prompts across accounts
 - **Handoff templates** — reusable task handoff contracts (built-in and custom)
 - **Notifications** — OS-native notifications for rate limits, handoffs, and messages
-- **Multi-provider** — Claude Code, Codex CLI, OpenHands, Gemini CLI
+- **Multi-provider** — Claude Code, Codex CLI, OpenHands, Gemini CLI, OpenCode, Cursor Agent
 - **Multi-terminal** — WezTerm, iTerm2, GNOME Terminal, Windows Terminal
-- **MCP bridge** — 21 MCP tools for AI agents to interact with agentctl programmatically
+- **MCP bridge** — 55 MCP tools for AI agents to interact with agentctl programmatically
 
 ---
 
@@ -61,6 +61,8 @@ actl
 ```bash
 actl add work                                    # defaults to claude-code provider
 actl add codex --provider codex-cli              # use Codex CLI
+actl add cursor --provider cursor-agent         # use Cursor Agent
+actl add opencode --provider opencode            # use OpenCode
 actl add review --color "#f38ba8" --label "Code Review"
 ```
 
@@ -91,7 +93,7 @@ Each account gets:
 | `--dir` | Config directory | `~/.claude-<name>` |
 | `--color` | Hex color for TUI | Catppuccin palette |
 | `--label` | Display label | Capitalized name |
-| `--provider` | Provider type | `claude-code` |
+| `--provider` | Provider type | `claude-code` (default) |
 
 #### `actl remove` flags
 
@@ -172,7 +174,7 @@ Run `actl` with no arguments to open the interactive dashboard.
 
 ## MCP Tools
 
-The MCP bridge exposes 21 tools that AI agents can use to communicate with agentctl. Start the bridge per-account:
+The MCP bridge exposes 55 tools that AI agents can use to communicate with agentctl. Start the bridge per-account:
 
 ```bash
 actl bridge --account work
@@ -397,7 +399,7 @@ Config file: `~/.agentctl/config.json`
       configDir: "~/.claude-work",
       color: "#cba6f7",
       label: "Work",
-      provider: "claude-code",       // claude-code | codex-cli | openhands | gemini-cli
+      provider: "claude-code",       // claude-code | codex-cli | openhands | gemini-cli | opencode | cursor-agent
       quotaPolicy?: {
         plan: "max-5x",              // max-5x | max-20x | pro | unknown
         windowMs: 18000000,          // 5 hours
@@ -456,10 +458,12 @@ Override the base directory with `AGENTCTL_DIR` environment variable.
 
 | ID | Name | Icon | Supports Entire |
 |----|------|------|-----------------|
-| `claude-code` | Claude Code | :purple_circle: | Yes |
-| `codex-cli` | Codex CLI | :green_circle: | No |
-| `openhands` | OpenHands | :raised_hand_with_fingers_splayed: | No |
-| `gemini-cli` | Gemini CLI | :large_blue_circle: | No |
+| `claude-code` | Claude Code | ✦ | Yes |
+| `codex-cli` | Codex CLI | 🧬 | No |
+| `openhands` | OpenHands | 🖐️ | No |
+| `gemini-cli` | Gemini CLI | ♊ | No |
+| `opencode` | OpenCode | 🔓 | No |
+| `cursor-agent` | Cursor Agent | 🎯 | No |
 
 Each provider implements process detection, launch command building, usage source reading, and quota estimation.
 
@@ -553,12 +557,14 @@ agentctl/
 │   │   └── auto-launcher.ts     # Auto-launch logic
 │   ├── mcp/
 │   │   ├── bridge.ts            # MCP server ↔ daemon bridge
-│   │   └── tools.ts             # 21 MCP tool registrations
+│   │   └── tools.ts             # 55 MCP tool registrations
 │   ├── providers/
 │   │   ├── claude-code.ts       # Claude Code provider
 │   │   ├── codex-cli.ts         # Codex CLI provider
 │   │   ├── openhands.ts         # OpenHands provider
 │   │   ├── gemini-cli.ts        # Gemini CLI provider
+│   │   ├── opencode.ts          # OpenCode provider
+│   │   ├── cursor-agent.ts      # Cursor Agent provider
 │   │   └── registry.ts          # Provider registry
 │   ├── services/
 │   │   ├── account-manager.ts   # Account CRUD + shell aliases

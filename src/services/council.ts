@@ -1,26 +1,15 @@
-export interface CouncilConfig {
-  models: string[];
-  chairman: string;
-  apiKey?: string;
-}
+import type { CouncilResponse, CouncilRanking, AggregateRank } from "../types";
+import { DEFAULT_COUNCIL_CONFIG, OPENROUTER_API_URL } from "./council-config";
+import type { CouncilServiceConfig } from "./council-config";
+
+export { type CouncilServiceConfig as CouncilConfig };
 
 export interface CouncilAnalysis {
   taskGoal: string;
   timestamp: string;
-  individualAnalyses: Array<{
-    model: string;
-    complexity: "low" | "medium" | "high" | "critical";
-    estimatedDurationMinutes: number;
-    requiredSkills: string[];
-    recommendedApproach: string;
-    risks: string[];
-    suggestedProvider?: string;
-  }>;
-  peerRankings: Array<{
-    reviewer: string;
-    ranking: number[];
-    reasoning: string;
-  }>;
+  individualAnalyses: CouncilResponse[];
+  peerRankings: CouncilRanking[];
+  aggregateRankings: AggregateRank[];
   synthesis: {
     chairman: string;
     consensusComplexity: "low" | "medium" | "high" | "critical";
@@ -52,9 +41,10 @@ export function parseJSONFromLLM(text: string): any {
   }
 }
 
-export function createOpenRouterCaller(apiKey: string): LLMCaller {
+export function createOpenRouterCaller(apiKey: string, baseUrl?: string): LLMCaller {
+  const url = baseUrl ?? OPENROUTER_API_URL;
   return async (model: string, systemPrompt: string, userPrompt: string): Promise<string> => {
-    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+    const response = await fetch(url, {
       method: "POST",
       headers: {
         "Authorization": `Bearer ${apiKey}`,
@@ -76,6 +66,42 @@ export function createOpenRouterCaller(apiKey: string): LLMCaller {
     const data = await response.json() as any;
     return data.choices[0].message.content;
   };
+}
+
+/**
+ * Calculate aggregate rankings from peer review results.
+ * Each ranking is an array of 0-based indices (best-to-worst).
+ * Returns models sorted by average rank (lower is better).
+ */
+export function calculateAggregateRankings(
+  rankings: CouncilRanking[],
+  models: string[],
+): AggregateRank[] {
+  const positionSums = new Map<string, { total: number; count: number }>();
+
+  for (const r of rankings) {
+    for (let position = 0; position < r.ranking.length; position++) {
+      const modelIndex = r.ranking[position];
+      if (modelIndex < 0 || modelIndex >= models.length) continue;
+      const model = models[modelIndex];
+      const entry = positionSums.get(model) ?? { total: 0, count: 0 };
+      entry.total += position + 1; // 1-based rank
+      entry.count += 1;
+      positionSums.set(model, entry);
+    }
+  }
+
+  const aggregate: AggregateRank[] = [];
+  for (const [model, { total, count }] of positionSums) {
+    aggregate.push({
+      model,
+      averageRank: Math.round((total / count) * 100) / 100,
+      rankCount: count,
+    });
+  }
+
+  aggregate.sort((a, b) => a.averageRank - b.averageRank);
+  return aggregate;
 }
 
 const STAGE1_SYSTEM_PROMPT = `You are a task analysis expert. Analyze the given task and respond with a JSON object containing:
@@ -110,26 +136,49 @@ Respond with a JSON object containing:
 Respond ONLY with valid JSON, no other text.`;
 
 export class CouncilService {
-  private config: CouncilConfig;
+  private config: CouncilServiceConfig;
   private callLLM: LLMCaller;
 
-  constructor(config: CouncilConfig, llmCaller?: LLMCaller) {
-    this.config = config;
+  constructor(config: Partial<CouncilServiceConfig> & Pick<CouncilServiceConfig, "models" | "chairman">, llmCaller?: LLMCaller) {
+    this.config = { ...DEFAULT_COUNCIL_CONFIG, ...config };
 
     if (llmCaller) {
       this.callLLM = llmCaller;
     } else {
-      const apiKey = config.apiKey ?? process.env.OPENROUTER_API_KEY;
+      const apiKey = this.config.apiKey ?? process.env.OPENROUTER_API_KEY;
       if (!apiKey) {
         throw new Error("Council requires an OpenRouter API key (config.apiKey or OPENROUTER_API_KEY env var)");
       }
-      this.callLLM = createOpenRouterCaller(apiKey);
+      this.callLLM = createOpenRouterCaller(apiKey, this.config.openRouterUrl);
     }
   }
 
   async analyze(goal: string, context?: string): Promise<CouncilAnalysis> {
     const individualAnalyses = await this.stage1_collectAnalyses(goal, context);
+
+    if (individualAnalyses.length === 0) {
+      return {
+        taskGoal: goal,
+        timestamp: new Date().toISOString(),
+        individualAnalyses: [],
+        peerRankings: [],
+        aggregateRankings: [],
+        synthesis: {
+          chairman: this.config.chairman,
+          consensusComplexity: "medium",
+          consensusDurationMinutes: 30,
+          consensusSkills: [],
+          recommendedApproach: "Unable to analyze — all models failed",
+          confidence: 0,
+        },
+      };
+    }
+
     const peerRankings = await this.stage2_peerReview(goal, individualAnalyses);
+    const aggregateRankings = calculateAggregateRankings(
+      peerRankings,
+      individualAnalyses.map((a) => a.model),
+    );
     const synthesis = await this.stage3_synthesize(goal, individualAnalyses, peerRankings);
 
     return {
@@ -137,11 +186,12 @@ export class CouncilService {
       timestamp: new Date().toISOString(),
       individualAnalyses,
       peerRankings,
+      aggregateRankings,
       synthesis,
     };
   }
 
-  async stage1_collectAnalyses(goal: string, context?: string): Promise<CouncilAnalysis["individualAnalyses"]> {
+  async stage1_collectAnalyses(goal: string, context?: string): Promise<CouncilResponse[]> {
     const userPrompt = context
       ? `Task: ${goal}\n\nAdditional context: ${context}`
       : `Task: ${goal}`;
@@ -161,16 +211,16 @@ export class CouncilService {
           recommendedApproach: parsed.recommendedApproach ?? "",
           risks: parsed.risks ?? [],
           suggestedProvider: parsed.suggestedProvider,
-        };
+        } as CouncilResponse;
       })
     );
 
     return results
-      .filter((r) => r.status === "fulfilled")
-      .map((r) => (r as PromiseFulfilledResult<CouncilAnalysis["individualAnalyses"][0]>).value);
+      .filter((r): r is PromiseFulfilledResult<CouncilResponse> => r.status === "fulfilled")
+      .map((r) => r.value);
   }
 
-  async stage2_peerReview(goal: string, analyses: CouncilAnalysis["individualAnalyses"]): Promise<CouncilAnalysis["peerRankings"]> {
+  async stage2_peerReview(goal: string, analyses: CouncilResponse[]): Promise<CouncilRanking[]> {
     const labels = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
     const anonymized = analyses.map((a, i) => {
       return `Analysis ${labels[i]}:\n- Complexity: ${a.complexity}\n- Estimated Duration: ${a.estimatedDurationMinutes} minutes\n- Required Skills: ${a.requiredSkills.join(", ")}\n- Approach: ${a.recommendedApproach}\n- Risks: ${a.risks.join(", ")}`;
@@ -189,19 +239,19 @@ export class CouncilService {
           reviewer: model,
           ranking: parsed.ranking ?? [],
           reasoning: parsed.reasoning ?? "",
-        };
+        } as CouncilRanking;
       })
     );
 
     return results
-      .filter((r): r is PromiseFulfilledResult<CouncilAnalysis["peerRankings"][0]> => r.status === "fulfilled")
+      .filter((r): r is PromiseFulfilledResult<CouncilRanking> => r.status === "fulfilled")
       .map((r) => r.value);
   }
 
   async stage3_synthesize(
     goal: string,
-    analyses: CouncilAnalysis["individualAnalyses"],
-    rankings: CouncilAnalysis["peerRankings"]
+    analyses: CouncilResponse[],
+    rankings: CouncilRanking[]
   ): Promise<CouncilAnalysis["synthesis"]> {
     const analysesText = analyses.map((a, i) => {
       return `Analysis ${i + 1} (${a.model}):\n- Complexity: ${a.complexity}\n- Duration: ${a.estimatedDurationMinutes}min\n- Skills: ${a.requiredSkills.join(", ")}\n- Approach: ${a.recommendedApproach}\n- Risks: ${a.risks.join(", ")}\n- Suggested Provider: ${a.suggestedProvider ?? "none"}`;

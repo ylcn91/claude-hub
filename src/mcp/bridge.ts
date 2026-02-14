@@ -7,9 +7,9 @@ import { registerTools, type DaemonSender } from "./tools";
 import { createLineParser, generateRequestId, frameSend } from "../daemon/framing";
 import { getSockPath, getPidPath, getTokensDir } from "../paths";
 
-const DAEMON_SOCK_PATH = getSockPath();
-const DAEMON_PID_PATH = getPidPath();
-const TOKENS_DIR = getTokensDir();
+function getDaemonSockPath() { return getSockPath(); }
+function getDaemonPidPath() { return getPidPath(); }
+function getDaemonTokensDir() { return getTokensDir(); }
 
 const MCP_REQUEST_TIMEOUT_MS = 5_000;
 const DAEMON_START_TIMEOUT_MS = 3_000;
@@ -18,7 +18,7 @@ const MAX_RECONNECT_ATTEMPTS = 5;
 const RECONNECT_MAX_DELAY_MS = 30_000;
 
 function getToken(account: string): string {
-  const tokenPath = `${TOKENS_DIR}/${account}.token`;
+  const tokenPath = `${getDaemonTokensDir()}/${account}.token`;
   if (!existsSync(tokenPath)) {
     throw new Error(`Token file not found for account '${account}'. Run 'actl add' to create the account first.`);
   }
@@ -58,9 +58,9 @@ function createDaemonSender(socket: Socket): DaemonSender {
 }
 
 function isDaemonRunning(): boolean {
-  if (!existsSync(DAEMON_PID_PATH)) return false;
+  if (!existsSync(getDaemonPidPath())) return false;
   try {
-    const pid = parseInt(readFileSync(DAEMON_PID_PATH, "utf-8").trim(), 10);
+    const pid = parseInt(readFileSync(getDaemonPidPath(), "utf-8").trim(), 10);
     // process.kill with signal 0 checks if process exists without killing it
     process.kill(pid, 0);
     return true;
@@ -78,7 +78,7 @@ function canConnectToSocket(sockPath: string): Promise<boolean> {
 }
 
 export async function ensureDaemonRunning(): Promise<void> {
-  if (isDaemonRunning() && existsSync(DAEMON_SOCK_PATH) && await canConnectToSocket(DAEMON_SOCK_PATH)) return;
+  if (isDaemonRunning() && existsSync(getDaemonSockPath()) && await canConnectToSocket(getDaemonSockPath())) return;
 
   // Spawn daemon as a detached background process
   const daemonScript = new URL("../daemon/index.ts", import.meta.url).pathname;
@@ -92,7 +92,7 @@ export async function ensureDaemonRunning(): Promise<void> {
   // Wait for socket to be connectable (not just file existence)
   const deadline = Date.now() + DAEMON_START_TIMEOUT_MS;
   while (Date.now() < deadline) {
-    if (existsSync(DAEMON_SOCK_PATH) && await canConnectToSocket(DAEMON_SOCK_PATH)) return;
+    if (existsSync(getDaemonSockPath()) && await canConnectToSocket(getDaemonSockPath())) return;
     await new Promise((r) => setTimeout(r, DAEMON_START_POLL_MS));
   }
 
@@ -129,7 +129,7 @@ export async function startBridge(account: string): Promise<void> {
         reconnectTimer = undefined;
         try {
           await ensureDaemonRunning();
-          const newSocket = createConnection(DAEMON_SOCK_PATH);
+          const newSocket = createConnection(getDaemonSockPath());
           // Attach immediately so no close events are missed
           attachReconnectHandlers(newSocket);
           newSocket.once("connect", async () => {
@@ -165,7 +165,7 @@ export async function startBridge(account: string): Promise<void> {
 
   // Connect to daemon — attach reconnect handlers before auth so no
   // close event can slip through the auth window unhandled.
-  const daemonSocket = createConnection(DAEMON_SOCK_PATH);
+  const daemonSocket = createConnection(getDaemonSockPath());
   currentSender = createDaemonSender(daemonSocket);
   attachReconnectHandlers(daemonSocket);
 

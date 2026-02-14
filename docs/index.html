@@ -1,0 +1,1907 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>agentctl — The AI Agent Control Center</title>
+<meta name="description" content="Orchestrate multiple AI agents from a single terminal. Multi-account management, structured task handoff, capability routing, and real-time monitoring.">
+<meta name="theme-color" content="#0a0a12">
+<meta property="og:title" content="agentctl — The AI Agent Control Center">
+<meta property="og:description" content="Orchestrate multiple AI agents from a single terminal.">
+<meta property="og:type" content="website">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect rx='16' width='100' height='100' fill='%230e0e1a'/><path d='M50 15L65 42 85 50 65 58 50 85 35 58 15 50 35 42Z' fill='%2389b4fa'/></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<script>(function(){var t=localStorage.getItem('agentctl-theme')||(window.matchMedia('(prefers-color-scheme:light)').matches?'light':'dark');document.documentElement.setAttribute('data-theme',t);document.querySelector('meta[name="theme-color"]').setAttribute('content',t==='light'?'#eff1f5':'#0a0a12')})()</script>
+<style>
+/* ═══════════════════════════════════════════════
+   DESIGN TOKENS
+   ═══════════════════════════════════════════════ */
+:root {
+  color-scheme: dark;
+  --bg-deep: #07070f;
+  --bg-surface: #0e0e1a;
+  --bg-overlay: #151525;
+  --bg-card: #12121e;
+  --text-primary: #cdd6f4;
+  --text-secondary: #7f849c;
+  --text-dim: #45475a;
+  --accent-blue: #89b4fa;
+  --accent-purple: #cba6f7;
+  --accent-green: #a6e3a1;
+  --accent-red: #f38ba8;
+  --accent-peach: #fab387;
+  --accent-teal: #94e2d5;
+  --accent-pink: #f5c2e7;
+  --surface-border: #313244;
+  --glow-blue: rgba(137, 180, 250, 0.15);
+  --glow-purple: rgba(203, 166, 247, 0.12);
+  --glow-green: rgba(166, 227, 161, 0.1);
+  --font-display: 'Outfit', sans-serif;
+  --font-mono: 'Space Mono', monospace;
+  --nav-height: 64px;
+  --max-w: 1140px;
+  --section-pad: clamp(80px, 12vh, 140px);
+}
+
+/* ═══════════════════════════════════════════════
+   RESET & BASE
+   ═══════════════════════════════════════════════ */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html {
+  scroll-behavior: smooth;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  font-family: var(--font-display);
+  background: var(--bg-deep);
+  color: var(--text-primary);
+  line-height: 1.6;
+  overflow-x: hidden;
+}
+
+::selection {
+  background: rgba(137, 180, 250, 0.3);
+  color: #fff;
+}
+
+a { color: var(--accent-teal); text-decoration: none; transition: color 0.2s; }
+a:hover { color: var(--accent-blue); }
+
+.container { max-width: var(--max-w); margin: 0 auto; padding: 0 24px; }
+
+section {
+  padding: var(--section-pad) 0;
+  position: relative;
+}
+
+/* ═══════════════════════════════════════════════
+   ANIMATION SYSTEM
+   ═══════════════════════════════════════════════ */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+.reveal {
+  opacity: 0;
+  transform: translateY(32px);
+  transition: opacity 0.8s cubic-bezier(0.16, 1, 0.3, 1),
+              transform 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.reveal.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+.reveal-delay-1 { transition-delay: 0.1s; }
+.reveal-delay-2 { transition-delay: 0.2s; }
+.reveal-delay-3 { transition-delay: 0.3s; }
+.reveal-delay-4 { transition-delay: 0.4s; }
+.reveal-delay-5 { transition-delay: 0.5s; }
+
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-12px); }
+}
+
+@keyframes glow-pulse {
+  0%, 100% {
+    text-shadow:
+      0 0 20px rgba(137, 180, 250, 0.4),
+      0 0 60px rgba(137, 180, 250, 0.15),
+      0 0 100px rgba(203, 166, 247, 0.08);
+  }
+  50% {
+    text-shadow:
+      0 0 30px rgba(137, 180, 250, 0.6),
+      0 0 80px rgba(137, 180, 250, 0.25),
+      0 0 140px rgba(203, 166, 247, 0.15);
+  }
+}
+
+@keyframes particle-drift {
+  0% { transform: translateY(0) translateX(0); opacity: 0; }
+  10% { opacity: 1; }
+  90% { opacity: 1; }
+  100% { transform: translateY(-100vh) translateX(50px); opacity: 0; }
+}
+
+@keyframes scroll-hint {
+  0%, 100% { transform: translateY(0); opacity: 0.4; }
+  50% { transform: translateY(8px); opacity: 0.8; }
+}
+
+@keyframes node-pulse {
+  0%, 100% { box-shadow: 0 0 20px var(--glow-blue), 0 0 40px transparent; }
+  50% { box-shadow: 0 0 30px var(--glow-blue), 0 0 60px var(--glow-purple); }
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+@keyframes gradient-shift {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+/* ═══════════════════════════════════════════════
+   SECTION HEADINGS
+   ═══════════════════════════════════════════════ */
+.section-label {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--accent-purple);
+  margin-bottom: 16px;
+  display: block;
+}
+
+.section-title {
+  font-size: clamp(1.8rem, 4vw, 2.8rem);
+  font-weight: 700;
+  line-height: 1.15;
+  margin-bottom: 20px;
+  letter-spacing: -0.02em;
+}
+
+.section-subtitle {
+  font-size: clamp(1rem, 2vw, 1.15rem);
+  color: var(--text-secondary);
+  max-width: 600px;
+  font-weight: 300;
+  line-height: 1.7;
+}
+
+/* ═══════════════════════════════════════════════
+   NAVIGATION
+   ═══════════════════════════════════════════════ */
+nav {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: var(--nav-height);
+  z-index: 1000;
+  transition: background 0.3s, box-shadow 0.3s, transform 0.3s;
+  transform: translateY(0);
+}
+
+nav.scrolled {
+  background: rgba(7, 7, 15, 0.85);
+  backdrop-filter: blur(16px) saturate(1.5);
+  -webkit-backdrop-filter: blur(16px) saturate(1.5);
+  box-shadow: 0 1px 0 rgba(49, 50, 68, 0.4);
+}
+
+nav.hidden { transform: translateY(-100%); }
+
+.nav-inner {
+  max-width: var(--max-w);
+  margin: 0 auto;
+  padding: 0 24px;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.nav-logo {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 1.1rem;
+  color: var(--accent-blue);
+  letter-spacing: -0.02em;
+}
+.nav-logo span { color: var(--text-dim); }
+
+.nav-links {
+  display: flex;
+  align-items: center;
+  gap: 32px;
+  list-style: none;
+}
+
+.nav-links a {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  font-weight: 400;
+  position: relative;
+  padding: 4px 0;
+  transition: color 0.2s;
+}
+.nav-links a::after {
+  content: '';
+  position: absolute;
+  bottom: -2px;
+  left: 0;
+  width: 0;
+  height: 1px;
+  background: var(--accent-blue);
+  transition: width 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.nav-links a:hover { color: var(--text-primary); }
+.nav-links a:hover::after { width: 100%; }
+
+.nav-github {
+  color: var(--text-secondary) !important;
+  display: flex;
+  align-items: center;
+  padding: 4px;
+  transition: color 0.2s;
+}
+.nav-github:hover { color: var(--text-primary) !important; }
+.nav-github::after { display: none !important; }
+
+.nav-hamburger {
+  display: none;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 8px;
+}
+.nav-hamburger span {
+  display: block;
+  width: 20px;
+  height: 2px;
+  background: var(--text-secondary);
+  margin: 5px 0;
+  transition: transform 0.3s, opacity 0.3s;
+}
+
+@media (max-width: 768px) {
+  .nav-links { display: none; }
+  .nav-hamburger { display: block; }
+  .nav-links.open {
+    display: flex;
+    flex-direction: column;
+    position: absolute;
+    top: var(--nav-height);
+    left: 0;
+    right: 0;
+    background: rgba(7, 7, 15, 0.95);
+    backdrop-filter: blur(16px);
+    padding: 24px;
+    gap: 20px;
+    border-bottom: 1px solid var(--surface-border);
+  }
+}
+
+/* ═══════════════════════════════════════════════
+   SECTION 1: HERO
+   ═══════════════════════════════════════════════ */
+.hero {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+  padding-top: var(--nav-height);
+}
+
+.hero::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(1.5px 1.5px at 10% 20%, rgba(137,180,250,0.25) 50%, transparent 50%),
+    radial-gradient(1px 1px at 30% 65%, rgba(203,166,247,0.2) 50%, transparent 50%),
+    radial-gradient(1.5px 1.5px at 50% 10%, rgba(148,226,213,0.2) 50%, transparent 50%),
+    radial-gradient(1px 1px at 70% 80%, rgba(137,180,250,0.15) 50%, transparent 50%),
+    radial-gradient(1.5px 1.5px at 85% 30%, rgba(203,166,247,0.2) 50%, transparent 50%),
+    radial-gradient(1px 1px at 20% 90%, rgba(166,227,161,0.15) 50%, transparent 50%),
+    radial-gradient(1px 1px at 60% 45%, rgba(137,180,250,0.12) 50%, transparent 50%),
+    radial-gradient(1.5px 1.5px at 90% 60%, rgba(245,194,231,0.15) 50%, transparent 50%),
+    radial-gradient(1px 1px at 40% 35%, rgba(203,166,247,0.12) 50%, transparent 50%),
+    radial-gradient(1.5px 1.5px at 75% 15%, rgba(148,226,213,0.18) 50%, transparent 50%);
+  animation: particle-drift 30s linear infinite;
+  pointer-events: none;
+}
+
+.hero::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 60% 50% at 50% 40%, rgba(137,180,250,0.06) 0%, transparent 70%),
+    radial-gradient(ellipse 40% 40% at 50% 60%, rgba(203,166,247,0.04) 0%, transparent 60%);
+  pointer-events: none;
+}
+
+.hero-content {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 32px;
+}
+
+.mascot {
+  font-family: var(--font-mono);
+  font-size: clamp(1rem, 3vw, 1.6rem);
+  line-height: 1.3;
+  white-space: pre;
+  animation: glow-pulse 4s ease-in-out infinite, float 6s ease-in-out infinite;
+  color: var(--accent-blue);
+  margin-bottom: 8px;
+  user-select: none;
+}
+.mascot .shadow { color: var(--text-dim); }
+
+.hero-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--accent-purple);
+  padding: 6px 16px;
+  border: 1px solid rgba(203, 166, 247, 0.2);
+  border-radius: 100px;
+  background: rgba(203, 166, 247, 0.04);
+}
+.hero-badge .dot {
+  width: 6px; height: 6px;
+  background: var(--accent-green);
+  border-radius: 50%;
+  display: inline-block;
+  animation: blink 2s infinite;
+}
+
+.hero h1 {
+  font-size: clamp(2.5rem, 6vw, 4.5rem);
+  font-weight: 700;
+  line-height: 1.08;
+  letter-spacing: -0.035em;
+  max-width: 700px;
+  background: linear-gradient(135deg, var(--text-primary) 0%, var(--accent-blue) 50%, var(--accent-purple) 100%);
+  background-size: 200% 200%;
+  animation: gradient-shift 8s ease infinite;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.hero-sub {
+  font-size: clamp(0.95rem, 2vw, 1.15rem);
+  color: var(--text-secondary);
+  max-width: 540px;
+  font-weight: 300;
+  line-height: 1.7;
+}
+
+.hero-ctas {
+  display: flex;
+  gap: 16px;
+  margin-top: 8px;
+}
+
+.btn-primary {
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  padding: 14px 32px;
+  background: var(--accent-blue);
+  color: var(--bg-deep);
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 700;
+  transition: transform 0.2s, box-shadow 0.2s;
+  text-decoration: none;
+}
+.btn-primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 32px rgba(137, 180, 250, 0.3);
+  color: var(--bg-deep);
+}
+
+.btn-secondary {
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  padding: 14px 32px;
+  background: transparent;
+  color: var(--text-primary);
+  border: 1px solid var(--surface-border);
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 400;
+  transition: border-color 0.2s, background 0.2s;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.btn-secondary:hover {
+  border-color: var(--accent-purple);
+  background: rgba(203, 166, 247, 0.06);
+  color: var(--text-primary);
+}
+
+.btn-secondary svg { flex-shrink: 0; }
+
+.scroll-hint {
+  position: absolute;
+  bottom: 40px;
+  left: 50%;
+  transform: translateX(-50%);
+  animation: scroll-hint 2.5s ease-in-out infinite;
+  color: var(--text-dim);
+  font-size: 1.2rem;
+  z-index: 1;
+}
+
+/* ═══════════════════════════════════════════════
+   SECTION 2: PROBLEM
+   ═══════════════════════════════════════════════ */
+.problem { position: relative; }
+
+.problem-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 24px;
+  margin-top: 56px;
+}
+
+.problem-card {
+  background: var(--bg-card);
+  border: 1px solid var(--surface-border);
+  border-radius: 12px;
+  padding: 36px 28px;
+  position: relative;
+  overflow: hidden;
+  transition: border-color 0.3s, transform 0.3s;
+}
+.problem-card .top-line {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--accent-red), transparent);
+  opacity: 0.5;
+}
+.problem-card:hover {
+  border-color: rgba(243, 139, 168, 0.3);
+  transform: translateY(-4px);
+}
+
+.problem-icon {
+  display: block;
+  width: 40px;
+  height: 40px;
+  margin-bottom: 20px;
+  color: var(--accent-red);
+}
+.problem-icon svg { width: 100%; height: 100%; }
+
+.problem-card h3 {
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin-bottom: 12px;
+  color: var(--text-primary);
+}
+
+.problem-card p {
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+@media (max-width: 768px) {
+  .problem-grid { grid-template-columns: 1fr; }
+}
+
+/* ═══════════════════════════════════════════════
+   SECTION 3: TERMINAL DEMO
+   ═══════════════════════════════════════════════ */
+.demo { position: relative; }
+
+.terminal-wrapper {
+  margin-top: 48px;
+  display: flex;
+  gap: 0;
+  max-width: 900px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.terminal-steps {
+  width: 200px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-top: 48px;
+}
+
+.step-btn {
+  background: transparent;
+  border: none;
+  text-align: left;
+  padding: 12px 16px;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--text-dim);
+  cursor: pointer;
+  border-radius: 8px 0 0 8px;
+  transition: color 0.2s, background 0.2s;
+  position: relative;
+}
+.step-btn:hover { color: var(--text-secondary); }
+.step-btn.active {
+  color: var(--accent-green);
+  background: var(--bg-surface);
+}
+.step-btn .indicator {
+  position: absolute;
+  right: 0;
+  top: 8px;
+  bottom: 8px;
+  width: 2px;
+  background: var(--accent-green);
+  border-radius: 2px;
+  display: none;
+}
+.step-btn.active .indicator { display: block; }
+
+.step-num {
+  color: var(--text-dim);
+  margin-right: 8px;
+}
+
+.terminal {
+  flex: 1;
+  background: var(--bg-surface);
+  border: 1px solid var(--surface-border);
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow:
+    0 0 0 1px rgba(137, 180, 250, 0.05),
+    0 20px 60px rgba(0, 0, 0, 0.5),
+    0 0 100px rgba(137, 180, 250, 0.03);
+}
+
+.terminal-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 18px;
+  background: var(--bg-overlay);
+  border-bottom: 1px solid var(--surface-border);
+}
+.terminal-dot {
+  width: 12px; height: 12px;
+  border-radius: 50%;
+}
+.terminal-dot.red { background: #ed6a5e; }
+.terminal-dot.yellow { background: #f4be4f; }
+.terminal-dot.green { background: #61c554; }
+.terminal-title {
+  flex: 1;
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--text-dim);
+}
+
+.terminal-body {
+  padding: 24px;
+  min-height: 340px;
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  line-height: 1.7;
+  position: relative;
+}
+
+.terminal-line { white-space: pre-wrap; word-break: break-all; }
+.t-prompt { color: var(--accent-green); }
+.t-cmd { color: var(--text-primary); }
+.t-comment { color: var(--text-dim); font-style: italic; }
+.t-success { color: var(--accent-green); }
+.t-info { color: var(--accent-blue); }
+.t-key { color: var(--accent-peach); }
+.t-str { color: var(--accent-green); }
+.t-num { color: var(--accent-peach); }
+.t-dim { color: var(--text-dim); }
+.t-purple { color: var(--accent-purple); }
+.t-teal { color: var(--accent-teal); }
+.t-border { color: var(--surface-border); }
+
+.cursor-blink {
+  display: inline-block;
+  width: 8px;
+  height: 16px;
+  background: var(--accent-green);
+  animation: blink 1s step-end infinite;
+  vertical-align: text-bottom;
+  margin-left: 2px;
+}
+
+@media (max-width: 768px) {
+  .terminal-wrapper { flex-direction: column; }
+  .terminal-steps {
+    flex-direction: row;
+    width: 100%;
+    padding-top: 0;
+    overflow-x: auto;
+    gap: 0;
+  }
+  .step-btn {
+    border-radius: 8px 8px 0 0;
+    white-space: nowrap;
+    font-size: 0.7rem;
+    padding: 10px 12px;
+  }
+  .step-btn .indicator {
+    top: auto;
+    bottom: 0;
+    left: 8px;
+    right: 8px;
+    width: auto;
+    height: 2px;
+  }
+}
+
+/* ═══════════════════════════════════════════════
+   SECTION 4: FEATURES
+   ═══════════════════════════════════════════════ */
+.features { position: relative; }
+
+.features-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 20px;
+  margin-top: 56px;
+}
+
+.feature-card {
+  background: var(--bg-card);
+  border: 1px solid var(--surface-border);
+  border-radius: 12px;
+  padding: 32px 28px;
+  transition: border-color 0.3s, transform 0.3s, box-shadow 0.3s;
+  position: relative;
+  overflow: hidden;
+  text-align: left;
+}
+.feature-card .top-line {
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--accent-blue), transparent);
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+.feature-card:hover {
+  border-color: rgba(137, 180, 250, 0.25);
+  transform: translateY(-3px);
+  box-shadow: 0 12px 40px rgba(0,0,0,0.3);
+}
+.feature-card:hover .top-line { opacity: 0.6; }
+
+.feature-icon {
+  display: block;
+  width: 32px;
+  height: 32px;
+  margin-bottom: 16px;
+  color: var(--accent-blue);
+}
+.feature-icon svg { width: 100%; height: 100%; }
+
+.feature-card h3 {
+  font-size: 1.05rem;
+  font-weight: 600;
+  margin-bottom: 10px;
+  color: var(--text-primary);
+}
+
+.feature-card p {
+  font-size: 0.88rem;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+@media (max-width: 768px) {
+  .features-grid { grid-template-columns: 1fr; }
+}
+
+/* ═══════════════════════════════════════════════
+   SECTION 5: ORCHESTRATION VIZ
+   ═══════════════════════════════════════════════ */
+.orchestration {
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+}
+
+.orch-diagram {
+  margin: 56px auto 0;
+  max-width: 640px;
+  position: relative;
+  aspect-ratio: 1.4 / 1;
+}
+
+.orch-node {
+  position: absolute;
+  width: 100px;
+  height: 100px;
+  border-radius: 50%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-card);
+  border: 1px solid var(--surface-border);
+  animation: node-pulse 3s ease-in-out infinite;
+  z-index: 2;
+  transition: transform 0.3s;
+}
+.orch-node:hover { transform: scale(1.08); }
+.orch-node-icon { display: block; width: 28px; height: 28px; }
+.orch-node-icon svg { width: 100%; height: 100%; }
+.orch-node-label {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  color: var(--text-secondary);
+  margin-top: 4px;
+}
+
+.orch-node.n-top { top: 0; left: 50%; margin-left: -50px; }
+.orch-node.n-right { top: 50%; right: 0; margin-top: -50px; }
+.orch-node.n-bottom { bottom: 0; left: 50%; margin-left: -50px; }
+.orch-node.n-left { top: 50%; left: 0; margin-top: -50px; }
+.orch-node.n-center {
+  top: 50%; left: 50%;
+  margin-top: -40px; margin-left: -40px;
+  width: 80px; height: 80px;
+  border-color: var(--accent-blue);
+  background: var(--bg-overlay);
+  z-index: 3;
+}
+
+.orch-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1;
+}
+.orch-svg line {
+  stroke: var(--surface-border);
+  stroke-width: 1;
+  stroke-dasharray: 6 4;
+}
+
+.orch-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  position: absolute;
+  z-index: 4;
+}
+
+.orch-stats {
+  display: flex;
+  justify-content: center;
+  gap: 48px;
+  margin-top: 48px;
+}
+.orch-stat { text-align: center; }
+.orch-stat-num {
+  font-family: var(--font-mono);
+  font-size: 1.8rem;
+  font-weight: 700;
+  color: var(--accent-blue);
+}
+.orch-stat-label {
+  font-size: 0.8rem;
+  color: var(--text-dim);
+  margin-top: 4px;
+}
+
+@media (max-width: 640px) {
+  .orch-diagram { max-width: 320px; }
+  .orch-node { width: 70px; height: 70px; }
+  .orch-node.n-top { margin-left: -35px; }
+  .orch-node.n-right { margin-top: -35px; }
+  .orch-node.n-bottom { margin-left: -35px; }
+  .orch-node.n-left { margin-top: -35px; }
+  .orch-node.n-center { width: 56px; height: 56px; margin-top: -28px; margin-left: -28px; }
+  .orch-node-icon { width: 20px; height: 20px; }
+  .orch-node-label { font-size: 0.55rem; }
+  .orch-stats { gap: 24px; }
+  .orch-stat-num { font-size: 1.3rem; }
+}
+
+/* ═══════════════════════════════════════════════
+   SECTION 6: PROVIDERS
+   ═══════════════════════════════════════════════ */
+.providers { position: relative; }
+
+.provider-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 16px;
+  margin-top: 48px;
+}
+
+.provider-card {
+  background: var(--bg-card);
+  border: 1px solid var(--surface-border);
+  border-radius: 12px;
+  padding: 28px 16px;
+  text-align: center;
+  transition: border-color 0.3s, transform 0.3s;
+}
+.provider-card:hover {
+  border-color: rgba(137, 180, 250, 0.2);
+  transform: translateY(-3px);
+}
+.provider-icon { display: block; width: 36px; height: 36px; margin: 0 auto 12px; color: var(--accent-blue); }
+.provider-icon svg { width: 100%; height: 100%; }
+.provider-name {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--text-primary);
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+.provider-desc {
+  font-size: 0.72rem;
+  color: var(--text-dim);
+  line-height: 1.4;
+}
+
+.terminals-label {
+  font-size: 0.9rem;
+  color: var(--text-dim);
+  margin-top: 48px;
+  margin-bottom: 8px;
+  font-weight: 400;
+}
+
+.terminal-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.terminal-card {
+  background: var(--bg-card);
+  border: 1px solid var(--surface-border);
+  border-radius: 10px;
+  padding: 20px 16px;
+  text-align: center;
+  transition: border-color 0.3s;
+}
+.terminal-card:hover { border-color: rgba(148, 226, 213, 0.2); }
+.terminal-card-name {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+.terminal-card-platform {
+  font-size: 0.72rem;
+  color: var(--text-dim);
+}
+
+@media (max-width: 768px) {
+  .provider-grid { grid-template-columns: repeat(3, 1fr); }
+  .terminal-grid { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 480px) {
+  .provider-grid { grid-template-columns: repeat(2, 1fr); }
+}
+
+/* ═══════════════════════════════════════════════
+   SECTION 7: ARCHITECTURE
+   ═══════════════════════════════════════════════ */
+.architecture { position: relative; }
+
+.arch-stack {
+  margin: 56px auto 0;
+  max-width: 700px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.arch-layer {
+  background: var(--bg-card);
+  border: 1px solid var(--surface-border);
+  border-radius: 10px;
+  padding: 20px 28px;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  transition: border-color 0.3s, background 0.3s;
+}
+.arch-layer:hover {
+  border-color: rgba(137, 180, 250, 0.2);
+  background: var(--bg-overlay);
+}
+
+.arch-layer-name {
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--accent-blue);
+  min-width: 140px;
+}
+
+.arch-layer-detail {
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+}
+.arch-sep { color: var(--text-dim); margin: 0 6px; }
+
+.arch-arrow {
+  text-align: center;
+  color: var(--text-dim);
+  font-size: 0.9rem;
+  padding: 4px;
+}
+
+.built-with {
+  display: flex;
+  justify-content: center;
+  gap: 20px;
+  margin-top: 40px;
+  flex-wrap: wrap;
+}
+.built-badge {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  padding: 6px 14px;
+  border: 1px solid var(--surface-border);
+  border-radius: 6px;
+  color: var(--text-dim);
+  transition: border-color 0.2s, color 0.2s;
+}
+.built-badge:hover { border-color: var(--accent-teal); color: var(--accent-teal); }
+
+@media (max-width: 640px) {
+  .arch-layer { flex-direction: column; gap: 8px; text-align: center; }
+  .arch-layer-name { min-width: 0; }
+}
+
+/* ═══════════════════════════════════════════════
+   SECTION 8: GETTING STARTED
+   ═══════════════════════════════════════════════ */
+.getting-started { position: relative; }
+
+.steps {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 24px;
+  margin-top: 56px;
+}
+
+.step-card {
+  background: var(--bg-card);
+  border: 1px solid var(--surface-border);
+  border-radius: 12px;
+  padding: 28px 24px;
+}
+
+.step-number {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--accent-purple);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin-bottom: 16px;
+}
+
+.step-card h3 {
+  font-size: 1rem;
+  font-weight: 600;
+  margin-bottom: 16px;
+}
+
+.step-code {
+  background: var(--bg-deep);
+  border: 1px solid rgba(49, 50, 68, 0.5);
+  border-radius: 8px;
+  padding: 16px;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  line-height: 1.8;
+  position: relative;
+  overflow-x: auto;
+}
+
+.step-code .prompt { color: var(--accent-green); }
+.step-code .cmd { color: var(--text-primary); }
+
+.copy-btn {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  background: var(--bg-overlay);
+  border: 1px solid var(--surface-border);
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: color 0.2s, border-color 0.2s;
+}
+.copy-btn:hover { color: var(--accent-teal); border-color: var(--accent-teal); }
+
+@media (max-width: 768px) {
+  .steps { grid-template-columns: 1fr; }
+}
+
+
+/* ═══════════════════════════════════════════════
+   SECTION 10: FOOTER
+   ═══════════════════════════════════════════════ */
+footer {
+  text-align: center;
+  padding: 80px 24px 48px;
+  border-top: 1px solid var(--surface-border);
+}
+
+.footer-mascot {
+  font-family: var(--font-mono);
+  font-size: 0.5rem;
+  line-height: 1.3;
+  white-space: pre;
+  color: var(--text-dim);
+  margin-bottom: 28px;
+  opacity: 0.3;
+  user-select: none;
+}
+
+.footer-links {
+  display: flex;
+  justify-content: center;
+  gap: 32px;
+  margin-bottom: 24px;
+}
+.footer-links a {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: var(--text-dim);
+}
+.footer-links a:hover { color: var(--accent-teal); }
+
+.footer-tagline {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  margin-bottom: 16px;
+  font-weight: 300;
+}
+
+.footer-copy {
+  font-size: 0.72rem;
+  color: var(--text-dim);
+}
+
+/* ═══════════════════════════════════════════════
+   UTILITIES
+   ═══════════════════════════════════════════════ */
+.gradient-line {
+  width: 80px;
+  height: 2px;
+  background: linear-gradient(90deg, var(--accent-blue), var(--accent-purple));
+  border-radius: 2px;
+  margin: 0 auto 32px;
+}
+
+.section-center { text-align: center; }
+.section-center .section-subtitle { margin: 0 auto; }
+
+/* ═══════════════════════════════════════════════
+   THEME TOGGLE & ACTIONS
+   ═══════════════════════════════════════════════ */
+.nav-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.theme-toggle {
+  background: none;
+  border: 1px solid var(--surface-border);
+  border-radius: 8px;
+  padding: 6px;
+  cursor: pointer;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.2s, border-color 0.2s;
+}
+.theme-toggle:hover {
+  color: var(--accent-blue);
+  border-color: var(--accent-blue);
+}
+.theme-toggle .icon-moon { display: none; }
+
+/* ═══════════════════════════════════════════════
+   LIGHT THEME
+   ═══════════════════════════════════════════════ */
+[data-theme="light"] {
+  color-scheme: light;
+  --bg-deep: #eff1f5;
+  --bg-surface: #e6e9ef;
+  --bg-overlay: #dce0e8;
+  --bg-card: #ffffff;
+  --text-primary: #4c4f69;
+  --text-secondary: #6c6f85;
+  --text-dim: #9ca0b0;
+  --accent-blue: #1e66f5;
+  --accent-purple: #8839ef;
+  --accent-green: #40a02b;
+  --accent-red: #d20f39;
+  --accent-peach: #fe640b;
+  --accent-teal: #179299;
+  --accent-pink: #ea76cb;
+  --surface-border: #ccd0da;
+  --glow-blue: rgba(30, 102, 245, 0.1);
+  --glow-purple: rgba(136, 57, 239, 0.08);
+  --glow-green: rgba(64, 160, 43, 0.06);
+}
+
+[data-theme="light"] .theme-toggle .icon-sun { display: none; }
+[data-theme="light"] .theme-toggle .icon-moon { display: block; }
+
+[data-theme="light"] ::selection {
+  background: rgba(30, 102, 245, 0.2);
+  color: #1e1e2e;
+}
+
+[data-theme="light"] nav.scrolled {
+  background: rgba(239, 241, 245, 0.85);
+  box-shadow: 0 1px 0 rgba(204, 208, 218, 0.6);
+}
+
+[data-theme="light"] .nav-links.open {
+  background: rgba(239, 241, 245, 0.95);
+}
+
+[data-theme="light"] .hero::before {
+  background:
+    radial-gradient(1.5px 1.5px at 10% 20%, rgba(30,102,245,0.3) 50%, transparent 50%),
+    radial-gradient(1px 1px at 30% 65%, rgba(136,57,239,0.25) 50%, transparent 50%),
+    radial-gradient(1.5px 1.5px at 50% 10%, rgba(23,146,153,0.25) 50%, transparent 50%),
+    radial-gradient(1px 1px at 70% 80%, rgba(30,102,245,0.2) 50%, transparent 50%),
+    radial-gradient(1.5px 1.5px at 85% 30%, rgba(136,57,239,0.25) 50%, transparent 50%),
+    radial-gradient(1px 1px at 20% 90%, rgba(64,160,43,0.2) 50%, transparent 50%),
+    radial-gradient(1px 1px at 60% 45%, rgba(30,102,245,0.15) 50%, transparent 50%),
+    radial-gradient(1.5px 1.5px at 90% 60%, rgba(234,118,203,0.2) 50%, transparent 50%),
+    radial-gradient(1px 1px at 40% 35%, rgba(136,57,239,0.15) 50%, transparent 50%),
+    radial-gradient(1.5px 1.5px at 75% 15%, rgba(23,146,153,0.2) 50%, transparent 50%);
+}
+
+[data-theme="light"] .hero::after {
+  background:
+    radial-gradient(ellipse 60% 50% at 50% 40%, rgba(30,102,245,0.05) 0%, transparent 70%),
+    radial-gradient(ellipse 40% 40% at 50% 60%, rgba(136,57,239,0.03) 0%, transparent 60%);
+}
+
+[data-theme="light"] .mascot {
+  animation: float 6s ease-in-out infinite;
+  text-shadow: none;
+}
+
+[data-theme="light"] .terminal {
+  box-shadow:
+    0 0 0 1px rgba(30, 102, 245, 0.05),
+    0 20px 60px rgba(0, 0, 0, 0.08),
+    0 0 40px rgba(30, 102, 245, 0.02);
+}
+
+[data-theme="light"] .btn-primary {
+  color: #ffffff;
+}
+[data-theme="light"] .btn-primary:hover {
+  box-shadow: 0 8px 32px rgba(30, 102, 245, 0.2);
+  color: #ffffff;
+}
+
+[data-theme="light"] .feature-card:hover {
+  box-shadow: 0 12px 40px rgba(0,0,0,0.08);
+}
+
+[data-theme="light"] .problem-card:hover {
+  border-color: rgba(210, 15, 57, 0.3);
+}
+</style>
+</head>
+<body>
+
+<!-- NAVIGATION -->
+<nav id="nav">
+  <div class="nav-inner">
+    <a href="#" class="nav-logo">actl<span>.</span></a>
+    <ul class="nav-links" id="nav-links">
+      <li><a href="#features">Features</a></li>
+      <li><a href="#demo">Demo</a></li>
+      <li><a href="#providers">Providers</a></li>
+      <li><a href="#architecture">Architecture</a></li>
+      <li><a href="#getting-started">Get Started</a></li>
+      <li><a href="https://github.com/ylcn91/agentctl" class="nav-github" target="_blank" rel="noopener" aria-label="GitHub"><svg width="20" height="20" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg></a></li>
+    </ul>
+    <div class="nav-actions">
+      <button class="theme-toggle" id="theme-toggle" aria-label="Toggle theme">
+        <svg class="icon-sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+        <svg class="icon-moon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+      </button>
+      <button class="nav-hamburger" id="hamburger" aria-label="Toggle menu">
+        <span></span><span></span><span></span>
+      </button>
+    </div>
+  </div>
+</nav>
+
+<!-- SECTION 1: HERO -->
+<section class="hero" id="hero">
+  <div class="hero-content">
+    <pre class="mascot" aria-hidden="true"><span class="shadow"> </span><span>&#9608;&#9608;&#9608;&#9608;&#9608;</span><span class="shadow">&#9556;</span>   <span>&#9608;&#9608;</span><span class="shadow">&#9559;</span>
+<span>&#9608;&#9608;</span><span class="shadow">&#9556;&#9552;&#9552;</span><span>&#9608;&#9608;</span><span class="shadow">&#9559;</span> <span>&#9608;&#9608;&#9608;</span><span class="shadow">&#9553;</span>
+<span class="shadow">&#9562;</span><span>&#9608;&#9608;&#9608;&#9608;&#9608;</span><span class="shadow">&#9556;&#9565;</span> <span class="shadow">&#9562;</span><span>&#9608;&#9608;</span><span class="shadow">&#9553;</span>
+ <span class="shadow">&#9562;&#9552;&#9552;&#9552;</span><span>&#9608;&#9608;</span><span class="shadow">&#9553;</span>  <span>&#9608;&#9608;</span><span class="shadow">&#9553;</span>
+ <span>&#9608;&#9608;&#9608;&#9608;&#9608;</span><span class="shadow">&#9556;&#9565;</span>  <span>&#9608;&#9608;</span><span class="shadow">&#9553;</span>
+ <span class="shadow">&#9562;&#9552;&#9552;&#9552;&#9552;&#9565;</span>   <span class="shadow">&#9562;&#9552;&#9565;</span></pre>
+
+    <div class="hero-badge"><span class="dot"></span> Open Source</div>
+
+    <h1>The AI Agent Control Center</h1>
+
+    <p class="hero-sub">Orchestrate multiple AI agents from a single terminal. Multi-account management, structured task handoff, capability routing, and real-time monitoring.</p>
+
+    <div class="hero-ctas">
+      <a href="#getting-started" class="btn-primary">Get Started</a>
+      <a href="https://github.com/ylcn91/agentctl" class="btn-secondary" target="_blank" rel="noopener">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+        GitHub
+      </a>
+    </div>
+  </div>
+  <div class="scroll-hint" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></div>
+</section>
+
+<!-- SECTION 2: PROBLEM -->
+<section class="problem" id="problem">
+  <div class="container">
+    <span class="section-label reveal">The Problem</span>
+    <h2 class="section-title reveal reveal-delay-1">AI agents are powerful alone.<br>Chaotic together.</h2>
+
+    <div class="problem-grid">
+      <div class="problem-card reveal reveal-delay-1">
+        <div class="top-line"></div>
+        <span class="problem-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="5" cy="12" r="2.5"/><circle cx="12" cy="5" r="2.5"/><circle cx="19" cy="12" r="2.5"/></svg></span>
+        <h3>Isolated silos</h3>
+        <p>Each agent runs in its own terminal. No shared context, no coordination, no awareness of what others are doing.</p>
+      </div>
+      <div class="problem-card reveal reveal-delay-2">
+        <div class="top-line"></div>
+        <span class="problem-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3L4 7l4 4"/><path d="M4 7h16"/><path d="M16 21l4-4-4-4"/><path d="M20 17H4"/></svg></span>
+        <h3>Manual handoff</h3>
+        <p>Copy-pasting between agents. No structure, no acceptance criteria, no accountability for outcomes.</p>
+      </div>
+      <div class="problem-card reveal reveal-delay-3">
+        <div class="top-line"></div>
+        <span class="problem-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg></span>
+        <h3>Zero visibility</h3>
+        <p>No dashboard, no SLA tracking, no idea which agent does what best. Flying blind with expensive resources.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- SECTION 3: TERMINAL DEMO -->
+<section class="demo" id="demo">
+  <div class="container section-center">
+    <span class="section-label reveal">Interactive Demo</span>
+    <h2 class="section-title reveal reveal-delay-1">See it in action</h2>
+    <p class="section-subtitle reveal reveal-delay-2">Click through a real workflow &mdash; from adding agents to intelligent task routing.</p>
+
+    <div class="terminal-wrapper reveal reveal-delay-3">
+      <div class="terminal-steps">
+        <button class="step-btn active" data-step="0"><span class="step-num">01</span> Add accounts<span class="indicator"></span></button>
+        <button class="step-btn" data-step="1"><span class="step-num">02</span> Start daemon<span class="indicator"></span></button>
+        <button class="step-btn" data-step="2"><span class="step-num">03</span> Task handoff<span class="indicator"></span></button>
+        <button class="step-btn" data-step="3"><span class="step-num">04</span> Smart routing<span class="indicator"></span></button>
+        <button class="step-btn" data-step="4"><span class="step-num">05</span> Dashboard<span class="indicator"></span></button>
+      </div>
+
+      <div class="terminal">
+        <div class="terminal-bar">
+          <div class="terminal-dot red"></div>
+          <div class="terminal-dot yellow"></div>
+          <div class="terminal-dot green"></div>
+          <div class="terminal-title">agentctl</div>
+          <div></div>
+        </div>
+        <div class="terminal-body" id="terminal-body"></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- SECTION 4: FEATURES -->
+<section class="features" id="features">
+  <div class="container section-center">
+    <span class="section-label reveal">Capabilities</span>
+    <h2 class="section-title reveal reveal-delay-1">Everything you need to<br>orchestrate AI agents</h2>
+    <p class="section-subtitle reveal reveal-delay-2">From account management to intelligent routing &mdash; a complete control plane for multi-agent workflows.</p>
+
+    <div class="features-grid">
+      <div class="feature-card reveal reveal-delay-1">
+        <div class="top-line"></div>
+        <span class="feature-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg></span>
+        <h3>Multi-Account Management</h3>
+        <p>Add, launch, and monitor multiple AI agents. Each gets isolated config, shell aliases, and unique authentication tokens.</p>
+      </div>
+      <div class="feature-card reveal reveal-delay-2">
+        <div class="top-line"></div>
+        <span class="feature-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M9 14l2 2 4-4"/></svg></span>
+        <h3>Structured Task Handoff</h3>
+        <p>Hand off work with goals, acceptance criteria, and verification commands. Auto-acceptance runs your test suite automatically.</p>
+      </div>
+      <div class="feature-card reveal reveal-delay-1">
+        <div class="top-line"></div>
+        <span class="feature-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><line x1="6" y1="3" x2="6" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg></span>
+        <h3>Capability Routing</h3>
+        <p>Intelligent assignment scores agents by skill match, success rate, speed, and trust. Always picks the right agent for the job.</p>
+      </div>
+      <div class="feature-card reveal reveal-delay-2">
+        <div class="top-line"></div>
+        <span class="feature-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></span>
+        <h3>SLA Monitoring</h3>
+        <p>Detect stale tasks automatically with graduated escalation: ping, reassign, or escalate. Never let work slip through the cracks.</p>
+      </div>
+      <div class="feature-card reveal reveal-delay-1">
+        <div class="top-line"></div>
+        <span class="feature-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></span>
+        <h3>MCP Bridge</h3>
+        <p>21 programmatic tools for AI agents. Messaging, handoff, workspace, routing &mdash; agents can orchestrate themselves.</p>
+      </div>
+      <div class="feature-card reveal reveal-delay-2">
+        <div class="top-line"></div>
+        <span class="feature-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10"/><path d="M20.49 15a9 9 0 0 1-14.85 3.36L1 14"/></svg></span>
+        <h3>Workflow Engine</h3>
+        <p>YAML-based workflows with step dependencies. Post-completion retrospectives feed back into routing intelligence.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- SECTION 5: ORCHESTRATION -->
+<section class="orchestration" id="orchestration">
+  <div class="container">
+    <span class="section-label reveal">Orchestration</span>
+    <h2 class="section-title reveal reveal-delay-1">Agents that coordinate,<br>not just coexist</h2>
+
+    <div class="orch-diagram reveal reveal-delay-2" id="orch-diagram">
+      <svg class="orch-svg" viewBox="0 0 640 460" fill="none" preserveAspectRatio="xMidYMid meet">
+        <line x1="320" y1="100" x2="320" y2="190"/>
+        <line x1="540" y1="230" x2="370" y2="230"/>
+        <line x1="320" y1="270" x2="320" y2="360"/>
+        <line x1="100" y1="230" x2="270" y2="230"/>
+        <line x1="370" y1="200" x2="540" y2="100" stroke-opacity="0.3"/>
+        <line x1="270" y1="200" x2="100" y2="100" stroke-opacity="0.3"/>
+        <line x1="370" y1="260" x2="540" y2="360" stroke-opacity="0.3"/>
+        <line x1="270" y1="260" x2="100" y2="360" stroke-opacity="0.3"/>
+      </svg>
+
+      <div class="orch-node n-top" style="animation-delay: 0s;">
+        <span class="orch-node-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg></span>
+        <span class="orch-node-label">frontend</span>
+      </div>
+      <div class="orch-node n-right" style="animation-delay: 0.5s;">
+        <span class="orch-node-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><circle cx="6" cy="6" r="1" fill="currentColor" stroke="none"/><circle cx="6" cy="18" r="1" fill="currentColor" stroke="none"/></svg></span>
+        <span class="orch-node-label">backend</span>
+      </div>
+      <div class="orch-node n-bottom" style="animation-delay: 1s;">
+        <span class="orch-node-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg></span>
+        <span class="orch-node-label">review</span>
+      </div>
+      <div class="orch-node n-left" style="animation-delay: 1.5s;">
+        <span class="orch-node-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg></span>
+        <span class="orch-node-label">devops</span>
+      </div>
+      <div class="orch-node n-center" style="animation-delay: 0.75s;">
+        <span class="orch-node-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></span>
+        <span class="orch-node-label">daemon</span>
+      </div>
+    </div>
+
+    <div class="orch-stats reveal reveal-delay-3">
+      <div class="orch-stat">
+        <div class="orch-stat-num">6</div>
+        <div class="orch-stat-label">providers</div>
+      </div>
+      <div class="orch-stat">
+        <div class="orch-stat-num">4</div>
+        <div class="orch-stat-label">terminals</div>
+      </div>
+      <div class="orch-stat">
+        <div class="orch-stat-num">21</div>
+        <div class="orch-stat-label">MCP tools</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- SECTION 6: PROVIDERS -->
+<section class="providers" id="providers">
+  <div class="container section-center">
+    <span class="section-label reveal">Integrations</span>
+    <h2 class="section-title reveal reveal-delay-1">Works with your stack</h2>
+
+    <div class="provider-grid">
+      <div class="provider-card reveal reveal-delay-1">
+        <span class="provider-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5z"/></svg></span>
+        <div class="provider-name">Claude Code</div>
+        <div class="provider-desc">Full monitoring &amp; checkpoints</div>
+      </div>
+      <div class="provider-card reveal reveal-delay-2">
+        <span class="provider-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg></span>
+        <div class="provider-name">Codex CLI</div>
+        <div class="provider-desc">OpenAI Codex</div>
+      </div>
+      <div class="provider-card reveal reveal-delay-3">
+        <span class="provider-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 11V6a2 2 0 0 0-4 0"/><path d="M14 10V4a2 2 0 0 0-4 0v6"/><path d="M10 10.5V6a2 2 0 0 0-4 0v8"/><path d="M18 8a2 2 0 0 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"/></svg></span>
+        <div class="provider-name">OpenHands</div>
+        <div class="provider-desc">Agent framework</div>
+      </div>
+      <div class="provider-card reveal reveal-delay-4">
+        <span class="provider-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M8 4c0 8 8 8 8 16"/><path d="M16 4c0 8-8 8-8 16"/></svg></span>
+        <div class="provider-name">Gemini CLI</div>
+        <div class="provider-desc">Google Gemini</div>
+      </div>
+      <div class="provider-card reveal reveal-delay-5">
+        <span class="provider-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></svg></span>
+        <div class="provider-name">OpenCode</div>
+        <div class="provider-desc">Open provider</div>
+      </div>
+      <div class="provider-card reveal reveal-delay-1">
+        <span class="provider-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3l7.07 16.97 2.51-7.39 7.39-2.51z"/><path d="M13 13l6 6"/></svg></span>
+        <div class="provider-name">Cursor Agent</div>
+        <div class="provider-desc">IDE-native agent</div>
+      </div>
+    </div>
+
+    <div class="terminals-label reveal">Terminal Support</div>
+
+    <div class="terminal-grid">
+      <div class="terminal-card reveal reveal-delay-1">
+        <div class="terminal-card-name">WezTerm</div>
+        <div class="terminal-card-platform">macOS</div>
+      </div>
+      <div class="terminal-card reveal reveal-delay-2">
+        <div class="terminal-card-name">iTerm2</div>
+        <div class="terminal-card-platform">macOS</div>
+      </div>
+      <div class="terminal-card reveal reveal-delay-3">
+        <div class="terminal-card-name">GNOME Terminal</div>
+        <div class="terminal-card-platform">Linux</div>
+      </div>
+      <div class="terminal-card reveal reveal-delay-4">
+        <div class="terminal-card-name">Windows Terminal</div>
+        <div class="terminal-card-platform">Windows</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- SECTION 7: ARCHITECTURE -->
+<section class="architecture" id="architecture">
+  <div class="container section-center">
+    <span class="section-label reveal">Architecture</span>
+    <h2 class="section-title reveal reveal-delay-1">Clean layers, zero magic</h2>
+    <p class="section-subtitle reveal reveal-delay-2">A strict layered architecture from CLI surface to infrastructure.</p>
+
+    <div class="arch-stack">
+      <div class="arch-layer reveal reveal-delay-1">
+        <span class="arch-layer-name">CLI (actl)</span>
+        <span class="arch-layer-detail">meow parser<span class="arch-sep">&middot;</span>command router</span>
+      </div>
+      <div class="arch-arrow reveal reveal-delay-1">&darr;</div>
+      <div class="arch-layer reveal reveal-delay-2">
+        <span class="arch-layer-name">TUI (Ink)</span>
+        <span class="arch-layer-detail">Dashboard<span class="arch-sep">&middot;</span>Tasks<span class="arch-sep">&middot;</span>Inbox<span class="arch-sep">&middot;</span>SLA<span class="arch-sep">&middot;</span>Prompts</span>
+      </div>
+      <div class="arch-arrow reveal reveal-delay-2">&darr;</div>
+      <div class="arch-layer reveal reveal-delay-3">
+        <span class="arch-layer-name">Service Layer</span>
+        <span class="arch-layer-detail">accounts<span class="arch-sep">&middot;</span>handoff<span class="arch-sep">&middot;</span>routing<span class="arch-sep">&middot;</span>sla<span class="arch-sep">&middot;</span>workflows</span>
+      </div>
+      <div class="arch-arrow reveal reveal-delay-3">&darr;</div>
+      <div class="arch-layer reveal reveal-delay-4">
+        <span class="arch-layer-name">Infrastructure</span>
+        <span class="arch-layer-detail">daemon (Unix socket)<span class="arch-sep">&middot;</span>MCP bridge<span class="arch-sep">&middot;</span>file store</span>
+      </div>
+    </div>
+
+    <div class="built-with reveal reveal-delay-5">
+      <span class="built-badge">Bun</span>
+      <span class="built-badge">Ink (React)</span>
+      <span class="built-badge">meow</span>
+      <span class="built-badge">MCP SDK</span>
+      <span class="built-badge">Chalk</span>
+    </div>
+  </div>
+</section>
+
+<!-- SECTION 8: GETTING STARTED -->
+<section class="getting-started" id="getting-started">
+  <div class="container section-center">
+    <span class="section-label reveal">Quick Start</span>
+    <h2 class="section-title reveal reveal-delay-1">Up and running in 30 seconds</h2>
+
+    <div class="steps">
+      <div class="step-card reveal reveal-delay-1">
+        <div class="step-number">Step 01</div>
+        <h3>Install</h3>
+        <div class="step-code" data-code="bun install &amp;&amp; bun link">
+          <button class="copy-btn" aria-label="Copy command">copy</button>
+          <span class="prompt">$</span> <span class="cmd">bun install &amp;&amp; bun link</span>
+        </div>
+      </div>
+
+      <div class="step-card reveal reveal-delay-2">
+        <div class="step-number">Step 02</div>
+        <h3>Add your first agent</h3>
+        <div class="step-code" data-code="actl add work">
+          <button class="copy-btn" aria-label="Copy command">copy</button>
+          <span class="prompt">$</span> <span class="cmd">actl add work</span>
+        </div>
+      </div>
+
+      <div class="step-card reveal reveal-delay-3">
+        <div class="step-number">Step 03</div>
+        <h3>Launch the dashboard</h3>
+        <div class="step-code" data-code="actl">
+          <button class="copy-btn" aria-label="Copy command">copy</button>
+          <span class="prompt">$</span> <span class="cmd">actl</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+
+<!-- SECTION 10: FOOTER -->
+<footer>
+  <pre class="footer-mascot" aria-hidden="true"> &#9608;&#9608;&#9608;&#9608;&#9608;  &#9608;&#9608;
+&#9608;&#9608;  &#9608;&#9608; &#9608;&#9608;&#9608;
+ &#9608;&#9608;&#9608;&#9608;&#9608;   &#9608;&#9608;
+    &#9608;&#9608;  &#9608;&#9608;
+ &#9608;&#9608;&#9608;&#9608;&#9608;   &#9608;&#9608;</pre>
+
+  <div class="footer-links">
+    <a href="https://github.com/ylcn91/agentctl" target="_blank" rel="noopener">GitHub</a>
+    <a href="https://github.com/ylcn91/agentctl#readme" target="_blank" rel="noopener">Docs</a>
+    <a href="https://github.com/ylcn91/agentctl/blob/main/LICENSE" target="_blank" rel="noopener">License</a>
+  </div>
+
+  <p class="footer-tagline">Built for the age of AI agents.</p>
+  <p class="footer-copy">&copy; 2025&ndash;2026 agentctl contributors</p>
+</footer>
+
+<!-- JAVASCRIPT -->
+<script>
+(function() {
+  'use strict';
+
+  // ── Navigation ──
+  var nav = document.getElementById('nav');
+  var hamburger = document.getElementById('hamburger');
+  var navLinks = document.getElementById('nav-links');
+  var lastY = 0;
+  var ticking = false;
+
+  function onScroll() {
+    var y = window.scrollY;
+    if (y > 80) nav.classList.add('scrolled');
+    else nav.classList.remove('scrolled');
+    if (y > lastY && y > 200) nav.classList.add('hidden');
+    else nav.classList.remove('hidden');
+    lastY = y;
+    ticking = false;
+  }
+
+  window.addEventListener('scroll', function() {
+    if (!ticking) { requestAnimationFrame(onScroll); ticking = true; }
+  }, { passive: true });
+
+  hamburger.addEventListener('click', function() {
+    navLinks.classList.toggle('open');
+  });
+  navLinks.querySelectorAll('a').forEach(function(a) {
+    a.addEventListener('click', function() { navLinks.classList.remove('open'); });
+  });
+
+  // ── Theme Toggle ──
+  var themeToggle = document.getElementById('theme-toggle');
+
+  function setTheme(theme) {
+    document.documentElement.setAttribute('data-theme', theme);
+    localStorage.setItem('agentctl-theme', theme);
+    var meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.setAttribute('content', theme === 'light' ? '#eff1f5' : '#0a0a12');
+  }
+
+  themeToggle.addEventListener('click', function() {
+    var current = document.documentElement.getAttribute('data-theme') || 'dark';
+    setTheme(current === 'dark' ? 'light' : 'dark');
+  });
+
+  window.matchMedia('(prefers-color-scheme: light)').addEventListener('change', function(e) {
+    if (!localStorage.getItem('agentctl-theme')) {
+      setTheme(e.matches ? 'light' : 'dark');
+    }
+  });
+
+  // ── Scroll Reveal ──
+  var revealObserver = new IntersectionObserver(function(entries) {
+    entries.forEach(function(entry) {
+      if (entry.isIntersecting) entry.target.classList.add('visible');
+    });
+  }, { threshold: 0.1, rootMargin: '0px 0px -40px 0px' });
+
+  document.querySelectorAll('.reveal').forEach(function(el) {
+    revealObserver.observe(el);
+  });
+
+
+  // ── Terminal Demo ──
+  var demoSteps = [
+    [
+      { t: 'cmd', c: 't-cmd', text: '$ actl add frontend --provider claude-code --color "#89b4fa"' },
+      { t: 'out', c: 't-success', text: '\u2713 Account "frontend" added (claude-code)' },
+      { t: 'out', c: 't-success', text: '\u2713 Shell alias \'claude-frontend\' added to ~/.zshrc' },
+      { t: 'empty' },
+      { t: 'cmd', c: 't-cmd', text: '$ actl add backend --provider gemini-cli --color "#a6e3a1"' },
+      { t: 'out', c: 't-success', text: '\u2713 Account "backend" added (gemini-cli)' },
+      { t: 'out', c: 't-success', text: '\u2713 Shell alias \'claude-backend\' added to ~/.zshrc' },
+    ],
+    [
+      { t: 'cmd', c: 't-cmd', text: '$ actl daemon start' },
+      { t: 'out', c: 't-success', text: '\u2713 Daemon started (pid 42891)' },
+      { t: 'out', c: 't-success', text: '\u2713 Listening on ~/.agentctl/hub.sock' },
+      { t: 'empty' },
+      { t: 'cmd', c: 't-cmd', text: '$ actl daemon status' },
+      { t: 'out', c: 't-info', text: '\u25cf Daemon is running (pid 42891)' },
+      { t: 'out', c: 't-dim', text: '  Socket: ~/.agentctl/hub.sock' },
+      { t: 'out', c: 't-dim', text: '  Uptime: 3s' },
+    ],
+    [
+      { t: 'out', c: 't-comment', text: '# frontend agent hands off API work to backend' },
+      { t: 'cmd', c: 't-cmd', text: '$ handoff_task({' },
+      { t: 'out', c: 't-dim', text: '    to: "backend",' },
+      { t: 'out', c: 't-dim', text: '    goal: "Build REST API for user auth",' },
+      { t: 'out', c: 't-dim', text: '    acceptance_criteria: [' },
+      { t: 'out', c: 't-dim', text: '      "POST /auth/login returns JWT",' },
+      { t: 'out', c: 't-dim', text: '      "Token expires in 24h",' },
+      { t: 'out', c: 't-dim', text: '      "Rate limited to 5 req/min"' },
+      { t: 'out', c: 't-dim', text: '    ],' },
+      { t: 'out', c: 't-dim', text: '    run_commands: ["bun test test/auth.test.ts"]' },
+      { t: 'out', c: 't-dim', text: '  })' },
+      { t: 'empty' },
+      { t: 'out', c: 't-success', text: '\u2713 Task #7 created \u2192 assigned to backend' },
+      { t: 'out', c: 't-success', text: '\u2713 Workspace: .worktrees/feat-user-auth' },
+    ],
+    [
+      { t: 'out', c: 't-comment', text: '# agentctl suggests the best agent for a task' },
+      { t: 'cmd', c: 't-cmd', text: '$ suggest_assignee({ skills: ["typescript", "api-design"] })' },
+      { t: 'empty' },
+      { t: 'out', c: 't-info', text: '  Agent       Score  Breakdown' },
+      { t: 'out', c: 't-dim', text: '  \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500' },
+      { t: 'out', c: 't-success', text: '  backend      87   skill:40  success:27  speed:15  trust:5' },
+      { t: 'out', c: 't-dim', text: '  frontend     64   skill:24  success:20  speed:15  trust:5' },
+    ],
+    [
+      { t: 'cmd', c: 't-cmd', text: '$ actl' },
+      { t: 'out', c: 't-border', text: '\u250c\u2500 agentctl \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510' },
+      { t: 'out', c: 't-teal', text:   '\u2502 [d]ash [l]aunch [t]asks [m]sg [e]sla [q]uit \u2502' },
+      { t: 'out', c: 't-border', text: '\u251c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2524' },
+      { t: 'out', c: 't-info', text:   '\u2502 \u25cf frontend   \u2726  3 tasks  \u2588\u2588\u2588\u2588\u2588\u2591\u2591 71%       \u2502' },
+      { t: 'out', c: 't-success', text:'\u2502 \u25cf backend    \u264a  2 tasks  \u2588\u2588\u2588\u2591\u2591\u2591\u2591 43%       \u2502' },
+      { t: 'out', c: 't-purple', text: '\u2502 \u25cf review     \u25ce  1 task   \u2588\u2588\u2591\u2591\u2591\u2591\u2591 28%       \u2502' },
+      { t: 'out', c: 't-border', text: '\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518' },
+    ],
+  ];
+
+  var terminalBody = document.getElementById('terminal-body');
+  var stepBtns = document.querySelectorAll('.step-btn');
+  var currentStep = -1;
+  var typeTimer = null;
+  var autoTimer = null;
+
+  function clearTerminal() {
+    if (typeTimer) clearInterval(typeTimer);
+    if (autoTimer) clearTimeout(autoTimer);
+    while (terminalBody.firstChild) terminalBody.removeChild(terminalBody.firstChild);
+  }
+
+  function addCursor() {
+    var c = document.createElement('span');
+    c.className = 'cursor-blink';
+    terminalBody.appendChild(c);
+    return c;
+  }
+
+  function typeStep(stepIndex) {
+    if (stepIndex === currentStep) return;
+    currentStep = stepIndex;
+
+    stepBtns.forEach(function(b, i) {
+      b.classList.toggle('active', i === stepIndex);
+    });
+
+    clearTerminal();
+    var cursorEl = addCursor();
+
+    var lines = demoSteps[stepIndex];
+    var lineIdx = 0;
+    var charIdx = 0;
+    var currentSpan = null;
+
+    function tick() {
+      if (lineIdx >= lines.length) {
+        clearInterval(typeTimer);
+        // auto-advance
+        autoTimer = setTimeout(function() {
+          typeStep((stepIndex + 1) % demoSteps.length);
+        }, 4000);
+        return;
+      }
+
+      var line = lines[lineIdx];
+
+      if (charIdx === 0) {
+        var div = document.createElement('div');
+        div.className = 'terminal-line';
+
+        if (line.t === 'empty') {
+          div.textContent = '\u00A0';
+          terminalBody.insertBefore(div, cursorEl);
+          lineIdx++;
+          return;
+        }
+
+        currentSpan = document.createElement('span');
+        currentSpan.className = line.c || '';
+        div.appendChild(currentSpan);
+        terminalBody.insertBefore(div, cursorEl);
+      }
+
+      var text = line.text || '';
+
+      if (line.t === 'cmd') {
+        if (charIdx < text.length) {
+          currentSpan.textContent = text.substring(0, charIdx + 1);
+          charIdx++;
+          return;
+        }
+      } else {
+        currentSpan.textContent = text;
+      }
+
+      charIdx = 0;
+      lineIdx++;
+    }
+
+    typeTimer = setInterval(tick, 22);
+  }
+
+  stepBtns.forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      typeStep(parseInt(btn.dataset.step, 10));
+    });
+  });
+
+  // Start demo when section visible
+  var demoObserver = new IntersectionObserver(function(entries) {
+    if (entries[0].isIntersecting && currentStep === -1) {
+      typeStep(0);
+      demoObserver.disconnect();
+    }
+  }, { threshold: 0.3 });
+  demoObserver.observe(document.getElementById('demo'));
+
+  // ── Copy Button ──
+  document.querySelectorAll('.copy-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      var codeEl = btn.parentElement;
+      var code = codeEl.dataset.code || codeEl.textContent.replace('copy', '').replace('$ ', '').trim();
+      navigator.clipboard.writeText(code).then(function() {
+        btn.textContent = 'copied!';
+        setTimeout(function() { btn.textContent = 'copy'; }, 2000);
+      });
+    });
+  });
+
+  // ── Orchestration Dots ──
+  function createFlowingDots() {
+    var diagram = document.getElementById('orch-diagram');
+    if (!diagram) return;
+
+    var paths = [
+      { sx: '50%', sy: '22%', ex: '50%', ey: '42%' },
+      { sx: '50%', sy: '50%', ex: '85%', ey: '50%' },
+      { sx: '50%', sy: '58%', ex: '50%', ey: '78%' },
+      { sx: '15%', sy: '50%', ex: '50%', ey: '50%' },
+    ];
+    var colors = ['#89b4fa', '#cba6f7', '#a6e3a1', '#94e2d5'];
+
+    paths.forEach(function(p, i) {
+      var dot = document.createElement('div');
+      dot.className = 'orch-dot';
+      dot.style.left = p.sx;
+      dot.style.top = p.sy;
+      dot.style.background = colors[i];
+      dot.style.boxShadow = '0 0 8px ' + colors[i];
+      diagram.appendChild(dot);
+
+      dot.animate([
+        { left: p.sx, top: p.sy, opacity: 0 },
+        { left: p.sx, top: p.sy, opacity: 1, offset: 0.1 },
+        { left: p.ex, top: p.ey, opacity: 1, offset: 0.9 },
+        { left: p.ex, top: p.ey, opacity: 0 },
+      ], {
+        duration: 2500 + (i * 400),
+        iterations: Infinity,
+        delay: i * 600,
+        easing: 'ease-in-out'
+      });
+    });
+  }
+
+  var orchObserver = new IntersectionObserver(function(entries) {
+    if (entries[0].isIntersecting) {
+      createFlowingDots();
+      orchObserver.disconnect();
+    }
+  }, { threshold: 0.2 });
+  var orchEl = document.getElementById('orch-diagram');
+  if (orchEl) orchObserver.observe(orchEl);
+
+})();
+</script>
+</body>
+</html>

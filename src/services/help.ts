@@ -37,7 +37,7 @@ const COMMANDS: Record<string, CommandHelp> = {
       "--dir       Config directory (default: ~/.claude-<name>)",
       "--color     Hex color for TUI display (default: Catppuccin palette)",
       "--label     Display label (default: capitalized name)",
-      "--provider  Provider type: claude-code, codex-cli, openhands, gemini-cli",
+      "--provider  Provider type: claude-code, codex-cli, openhands, gemini-cli, opencode, cursor-agent",
     ],
     examples: [
       "actl add work",

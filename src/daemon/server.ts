@@ -1,4 +1,4 @@
-import { createServer, type Server, type Socket } from "net";
+import { createServer, createConnection, type Server, type Socket } from "net";
 import { existsSync, unlinkSync, writeFileSync, readFileSync, mkdirSync, chmodSync } from "fs";
 import { dirname } from "path";
 import { timingSafeEqual } from "crypto";
@@ -6,6 +6,7 @@ import { DaemonState } from "./state";
 import { createLineParser, frameSend } from "./framing";
 import { notifyHandoff, notifyMessage, sendNotification } from "../services/notifications";
 import { validateHandoff } from "../services/handoff";
+import { checkDelegationDepth, type DelegationDepthConfig } from "../services/delegation-depth";
 import { loadTasks, saveTasks, updateTaskStatus, rejectTask, acceptTask, submitForReview, type TaskStatus } from "../services/tasks";
 import { runAcceptanceSuite } from "../services/acceptance-runner";
 import { rankAccounts } from "../services/account-capabilities";
@@ -17,6 +18,7 @@ import { startWatchdog } from "./watchdog";
 import { getHubDir, getSockPath, getPidPath, getTokensDir } from "../paths";
 import { scanWorkflowDir } from "../services/workflow-parser";
 import { ACCOUNT_NAME_RE } from "../services/account-manager";
+import { createReceipt } from "../services/verification-receipts";
 import { join } from "path";
 
 export async function verifyAccountToken(account: string, token: string): Promise<boolean> {
@@ -71,12 +73,20 @@ export interface DaemonOpts {
     retro?: boolean;
     sessions?: boolean;
     trust?: boolean;
+    council?: boolean;
+    circuitBreaker?: boolean;
+    cognitiveFriction?: boolean;
+    entireMonitoring?: boolean;
+    delegationDepth?: DelegationDepthConfig;
   };
+  entireGitDir?: string;
+  council?: { models: string[]; chairman: string; apiKey?: string };
 }
 
-export function startDaemon(opts?: DaemonOpts): { server: Server; state: DaemonState; sockPath: string; watchdog?: { stop: () => void }; sessionCleanupTimer?: ReturnType<typeof setInterval> } {
+export async function startDaemon(opts?: DaemonOpts): Promise<{ server: Server; state: DaemonState; sockPath: string; watchdog?: { stop: () => void }; sessionCleanupTimer?: ReturnType<typeof setInterval>; entireAdapter?: import("../services/entire-adapter").EntireAdapter }> {
   const state = new DaemonState(opts?.dbPath);
   const features = opts?.features;
+  const councilConfig = opts?.council;
 
   if (features?.workspaceWorktree) {
     state.initWorkspace(opts?.workspaceDbPath);
@@ -117,6 +127,55 @@ export function startDaemon(opts?: DaemonOpts): { server: Server; state: DaemonS
   if (features?.trust) {
     state.initTrust(opts?.trustDbPath);
   }
+  if (features?.circuitBreaker) {
+    state.initCircuitBreaker();
+  }
+
+  // Entire.io session monitoring adapter
+  let entireAdapter: import("../services/entire-adapter").EntireAdapter | undefined;
+  if (features?.entireMonitoring && opts?.entireGitDir) {
+    try {
+      const { EntireAdapter } = await import("../services/entire-adapter");
+      entireAdapter = new EntireAdapter(state.eventBus, opts.entireGitDir);
+      entireAdapter.startWatching();
+    } catch (e: any) {
+      console.error("[entire-adapter]", e.message);
+    }
+  }
+
+  // Bridge EventBus → ActivityStore: forward relevant delegation events for persistence
+  if (state.activityStore) {
+    const activityStore = state.activityStore;
+    state.eventBus.on("*", (event) => {
+      const typeMap: Record<string, string> = {
+        TASK_CREATED: "task_created",
+        TASK_ASSIGNED: "task_assigned",
+        TASK_STARTED: "task_started",
+        TASK_COMPLETED: "task_completed",
+        TASK_VERIFIED: "task_verified",
+        CHECKPOINT_REACHED: "checkpoint_reached",
+        PROGRESS_UPDATE: "progress_update",
+        SLA_WARNING: "sla_warning",
+        SLA_BREACH: "sla_breach",
+        REASSIGNMENT: "reassignment",
+        TRUST_UPDATE: "trust_update",
+        DELEGATION_CHAIN: "delegation_chain",
+      };
+      const activityType = typeMap[event.type];
+      if (!activityType) return;
+      const agent = ("agent" in event ? event.agent : undefined)
+        ?? ("delegator" in event ? event.delegator : undefined)
+        ?? "system";
+      const taskId = "taskId" in event ? (event as any).taskId : undefined;
+      activityStore.emit({
+        type: activityType as any,
+        timestamp: event.timestamp,
+        account: agent,
+        taskId,
+        metadata: { ...event },
+      });
+    });
+  }
 
   let watchdog: { stop: () => void } | undefined;
   if (features?.reliability) {
@@ -131,8 +190,27 @@ export function startDaemon(opts?: DaemonOpts): { server: Server; state: DaemonS
     mkdirSync(sockDir, { recursive: true });
   }
 
-  // Cleanup orphaned socket
-  if (existsSync(sockPath)) unlinkSync(sockPath);
+  // Cleanup orphaned socket — only if no live daemon is using it
+  if (existsSync(sockPath)) {
+    try {
+      const probe = createConnection(sockPath);
+      // If connection succeeds, a live daemon owns this socket
+      await new Promise<void>((resolve, reject) => {
+        probe.once("connect", () => {
+          probe.destroy();
+          reject(new Error("Daemon already running"));
+        });
+        probe.once("error", () => {
+          // Connection refused = stale socket, safe to unlink
+          resolve();
+        });
+      });
+    } catch (err: any) {
+      if (err.message === "Daemon already running") throw err;
+      // Any other error means socket is stale
+    }
+    unlinkSync(sockPath);
+  }
 
   const server = createServer((socket) => {
     let authenticated = false;
@@ -279,6 +357,50 @@ export function startDaemon(opts?: DaemonOpts): { server: Server; state: DaemonS
             return;
           }
 
+          // F-13: Delegation depth check — use feature config or defaults.maxDelegationDepth
+          let depthConfig = features?.delegationDepth;
+          if (!depthConfig) {
+            try {
+              const cfg = await loadConfig();
+              if (cfg.defaults?.maxDelegationDepth != null) {
+                depthConfig = { maxDepth: cfg.defaults.maxDelegationDepth };
+              }
+            } catch { /* config load is best-effort */ }
+          }
+          const depthCheck = checkDelegationDepth(validation.payload, depthConfig);
+
+          // Emit DELEGATION_CHAIN event for audit trail
+          const chain = [accountName, msg.to];
+          if (validation.payload.parent_handoff_id) {
+            chain.unshift(validation.payload.parent_handoff_id);
+          }
+          state.eventBus.emit({
+            type: "DELEGATION_CHAIN",
+            taskId: validation.payload.parent_handoff_id ?? `pending-${Date.now()}`,
+            chain,
+          });
+
+          if (!depthCheck.allowed) {
+            state.activityStore?.emit({
+              type: "delegation_chain",
+              timestamp: new Date().toISOString(),
+              account: accountName,
+              metadata: {
+                delegatee: msg.to,
+                currentDepth: depthCheck.currentDepth,
+                maxDepth: depthCheck.maxDepth,
+                reason: depthCheck.reason,
+                blocked: true,
+              },
+            });
+            safeWrite(socket, reply(msg, {
+              type: "error",
+              error: depthCheck.reason ?? "Delegation depth limit exceeded",
+              depthCheck,
+            }));
+            return;
+          }
+
           // Auto-collect context if projectDir is available
           let autoContext: any = undefined;
           const ctx = msg.context ?? {};
@@ -305,11 +427,70 @@ export function startDaemon(opts?: DaemonOpts): { server: Server; state: DaemonS
           };
           const handoffId = state.addMessage(handoffMsg);
           notifyHandoff(accountName, msg.to, validation.payload.goal).catch(e => console.error("[notify]", e.message));
+
+          // Create a corresponding task on the task board
+          try {
+            let board = await loadTasks();
+            const task = {
+              id: handoffId,
+              title: validation.payload.goal,
+              status: "todo" as TaskStatus,
+              assignee: msg.to,
+              createdAt: new Date().toISOString(),
+              events: [] as any[],
+            };
+            board = { tasks: [...board.tasks, task] };
+            await saveTasks(board);
+          } catch (e: any) { console.error("[handoff-task-create]", e.message); }
+
+          // F-02: Emit TASK_CREATED event
+          state.eventBus.emit({
+            type: "TASK_CREATED",
+            taskId: handoffId,
+            delegator: accountName,
+            characteristics: {
+              complexity: validation.payload.complexity,
+              criticality: validation.payload.criticality,
+              uncertainty: validation.payload.uncertainty,
+              verifiability: validation.payload.verifiability,
+              reversibility: validation.payload.reversibility,
+            },
+          });
+
           safeWrite(socket, reply(msg, {
             type: "result",
             delivered: state.isConnected(msg.to),
             queued: true,
             handoffId,
+            taskId: handoffId,
+          }));
+        },
+
+        reauthorize_delegation: (msg) => {
+          if (typeof msg.handoffId !== "string" || !msg.handoffId) {
+            safeWrite(socket, reply(msg, { type: "error", error: "Invalid field: handoffId" }));
+            return;
+          }
+          if (typeof msg.newMaxDepth !== "number" || msg.newMaxDepth < 1) {
+            safeWrite(socket, reply(msg, { type: "error", error: "Invalid field: newMaxDepth (must be a positive number)" }));
+            return;
+          }
+          // Store reauthorization as activity event for audit trail
+          state.activityStore?.emit({
+            type: "delegation_reauthorized",
+            timestamp: new Date().toISOString(),
+            account: accountName,
+            metadata: {
+              handoffId: msg.handoffId,
+              newMaxDepth: msg.newMaxDepth,
+              authorizedBy: accountName,
+            },
+          });
+          safeWrite(socket, reply(msg, {
+            type: "result",
+            reauthorized: true,
+            handoffId: msg.handoffId,
+            newMaxDepth: msg.newMaxDepth,
           }));
         },
 
@@ -347,6 +528,114 @@ export function startDaemon(opts?: DaemonOpts): { server: Server; state: DaemonS
             await saveTasks(board);
             const task = board.tasks.find((t) => t.id === msg.taskId);
 
+            // F-02: Emit status-specific EventBus events
+            if (status === "in_progress") {
+              state.eventBus.emit({ type: "TASK_STARTED", taskId: msg.taskId, agent: accountName });
+            } else if (status === "ready_for_review") {
+              state.eventBus.emit({ type: "CHECKPOINT_REACHED", taskId: msg.taskId, agent: accountName, percent: 100, step: "ready_for_review" });
+            } else if (status === "accepted") {
+              state.eventBus.emit({ type: "TASK_COMPLETED", taskId: msg.taskId, agent: task?.assignee ?? accountName, result: "success" });
+
+              // F-03: Record trust outcome on accept
+              if (state.trustStore && task?.assignee) {
+                const createdEvent = task.events.find((e: any) => e.type === "status_changed" && e.to === "in_progress");
+                const durationMinutes = createdEvent
+                  ? (Date.now() - new Date(createdEvent.timestamp).getTime()) / 60000
+                  : undefined;
+                const oldRep = state.trustStore.get(task.assignee);
+                const oldScore = oldRep?.trustScore ?? 50;
+                state.trustStore.recordOutcome(task.assignee, "completed", durationMinutes);
+                const newRep = state.trustStore.get(task.assignee);
+                if (newRep && newRep.trustScore !== oldScore) {
+                  state.eventBus.emit({
+                    type: "TRUST_UPDATE",
+                    agent: task.assignee,
+                    delta: newRep.trustScore - oldScore,
+                    reason: "task_accepted",
+                  });
+                }
+              }
+
+              // F-10: Create verification receipt on accept (human-review)
+              if (task) {
+                try {
+                  const handoffs = state.getHandoffs(accountName);
+                  const handoff = handoffs.find((h: any) => {
+                    try { return typeof JSON.parse(h.content) === "object"; } catch { return false; }
+                  });
+                  const specPayload = handoff ? handoff.content : msg.taskId;
+                  const receipt = createReceipt({
+                    taskId: msg.taskId,
+                    delegator: accountName,
+                    delegatee: task.assignee ?? accountName,
+                    specPayload,
+                    verdict: "accepted",
+                    method: "human-review",
+                  });
+                  state.eventBus.emit({
+                    type: "TASK_VERIFIED",
+                    taskId: msg.taskId,
+                    verifier: accountName,
+                    passed: true,
+                    receipt,
+                  });
+                  state.activityStore?.emit({
+                    type: "task_verified",
+                    timestamp: receipt.timestamp,
+                    account: accountName,
+                    taskId: msg.taskId,
+                    metadata: { receipt },
+                  });
+                } catch (e: any) { console.error("[receipt]", e.message); }
+              }
+            } else if (status === "rejected") {
+              state.eventBus.emit({ type: "TASK_COMPLETED", taskId: msg.taskId, agent: task?.assignee ?? accountName, result: "failure" });
+
+              // F-03: Record trust outcome on reject
+              if (state.trustStore && task?.assignee) {
+                const oldRep = state.trustStore.get(task.assignee);
+                const oldScore = oldRep?.trustScore ?? 50;
+                state.trustStore.recordOutcome(task.assignee, "rejected");
+                const newRep = state.trustStore.get(task.assignee);
+                if (newRep && newRep.trustScore !== oldScore) {
+                  state.eventBus.emit({
+                    type: "TRUST_UPDATE",
+                    agent: task.assignee,
+                    delta: newRep.trustScore - oldScore,
+                    reason: "task_rejected",
+                  });
+                }
+              }
+
+              // F-10: Create verification receipt on reject (human-review)
+              if (task) {
+                try {
+                  const receipt = createReceipt({
+                    taskId: msg.taskId,
+                    delegator: accountName,
+                    delegatee: task.assignee ?? accountName,
+                    specPayload: msg.taskId,
+                    verdict: "rejected",
+                    method: "human-review",
+                  });
+                  state.eventBus.emit({
+                    type: "TASK_VERIFIED",
+                    taskId: msg.taskId,
+                    verifier: accountName,
+                    passed: false,
+                    receipt,
+                  });
+                  state.activityStore?.emit({
+                    type: "task_verified",
+                    timestamp: receipt.timestamp,
+                    account: accountName,
+                    taskId: msg.taskId,
+                    metadata: { receipt },
+                  });
+                } catch (e: any) { console.error("[receipt]", e.message); }
+              }
+            }
+
             // F2: GitHub integration hooks (non-blocking)
             if (features?.githubIntegration) {
               (async () => {
@@ -375,6 +664,52 @@ export function startDaemon(opts?: DaemonOpts): { server: Server; state: DaemonS
 
             // Auto-acceptance: if transitioning to ready_for_review and feature enabled
             if (status === "ready_for_review" && features?.autoAcceptance && task) {
+              // F-11: Cognitive friction — check BEFORE running auto-acceptance
+              if (features.cognitiveFriction) {
+                try {
+                  // Look for the handoff to the assignee first, then to current account
+                  const assignee = task.assignee ?? accountName;
+                  const candidates = assignee !== accountName
+                    ? [...state.getHandoffs(assignee), ...state.getHandoffs(accountName)]
+                    : state.getHandoffs(accountName);
+                  const handoffForFriction = candidates.find((h: any) => {
+                    if (h.id === msg.taskId) return true;
+                    const ctx = h.context ?? {};
+                    return ctx.branch === msg.branch || ctx.projectDir === msg.workspacePath;
+                  });
+                  if (handoffForFriction) {
+                    let frictionPayload: any;
+                    try { frictionPayload = JSON.parse(handoffForFriction.content); } catch {}
+                    if (frictionPayload) {
+                      const { checkCognitiveFriction } = await import("../services/cognitive-friction");
+                      const friction = checkCognitiveFriction(frictionPayload);
+                      if (friction.requiresHumanReview) {
+                        state.activityStore?.emit({
+                          type: "cognitive_friction_triggered",
+                          timestamp: new Date().toISOString(),
+                          account: accountName,
+                          metadata: {
+                            taskId: msg.taskId,
+                            frictionLevel: friction.frictionLevel,
+                            reason: friction.reason,
+                          },
+                        });
+                        safeWrite(socket, reply(msg, {
+                          type: "result",
+                          task,
+                          acceptance: "blocked",
+                          reason: friction.reason,
+                          frictionLevel: friction.frictionLevel,
+                        }));
+                        return;
+                      }
+                    }
+                  }
+                } catch (e: any) {
+                  console.error("[cognitive-friction]", e.message);
+                }
+              }
+
               safeWrite(socket, reply(msg, { type: "result", task, acceptance: "running" }));
               (async () => {
                 try {
@@ -403,6 +738,65 @@ export function startDaemon(opts?: DaemonOpts): { server: Server; state: DaemonS
                     updatedBoard = rejectTask(updatedBoard, msg.taskId, result.summary);
                   }
                   await saveTasks(updatedBoard);
+
+                  // F-10: Create verification receipt after auto-acceptance
+                  try {
+                    const receipt = createReceipt({
+                      taskId: msg.taskId,
+                      delegator: handoff.from,
+                      delegatee: task.assignee ?? accountName,
+                      specPayload: handoff.content,
+                      verdict: result.passed ? "accepted" : "rejected",
+                      method: "auto-acceptance",
+                    });
+                    state.eventBus.emit({
+                      type: "TASK_VERIFIED",
+                      taskId: msg.taskId,
+                      verifier: "auto-acceptance",
+                      passed: result.passed,
+                      receipt,
+                    });
+                    state.activityStore?.emit({
+                      type: "task_verified",
+                      timestamp: receipt.timestamp,
+                      account: "auto-acceptance",
+                      taskId: msg.taskId,
+                      metadata: { receipt },
+                    });
+                  } catch (e: any) {
+                    console.error("[receipt]", e.message);
+                    // Still emit event even if receipt creation fails
+                    state.eventBus.emit({
+                      type: "TASK_VERIFIED",
+                      taskId: msg.taskId,
+                      verifier: "auto-acceptance",
+                      passed: result.passed,
+                    });
+                  }
+
+                  // F-03: Record trust outcome after auto-acceptance
+                  if (state.trustStore && task.assignee) {
+                    const createdEvent = task.events.find((e: any) => e.type === "status_changed" && e.to === "in_progress");
+                    const durationMinutes = createdEvent
+                      ? (Date.now() - new Date(createdEvent.timestamp).getTime()) / 60000
+                      : undefined;
+                    const oldRep = state.trustStore.get(task.assignee);
+                    const oldScore = oldRep?.trustScore ?? 50;
+                    if (result.passed) {
+                      state.trustStore.recordOutcome(task.assignee, "completed", durationMinutes);
+                    } else {
+                      state.trustStore.recordOutcome(task.assignee, "failed");
+                    }
+                    const newRep = state.trustStore.get(task.assignee);
+                    if (newRep && newRep.trustScore !== oldScore) {
+                      state.eventBus.emit({
+                        type: "TRUST_UPDATE",
+                        agent: task.assignee,
+                        delta: newRep.trustScore - oldScore,
+                        reason: result.passed ? "auto_acceptance_passed" : "auto_acceptance_failed",
+                      });
+                    }
+                  }
                 } catch (e: any) { console.error("[accept]", e.message); }
               })();
             } else {
@@ -502,6 +896,15 @@ export function startDaemon(opts?: DaemonOpts): { server: Server; state: DaemonS
             // Extract autoContext from payload if present
             const { autoContext, ...payloadWithoutAuto } = payload;
 
+            // F-02: Emit TASK_ASSIGNED event
+            state.eventBus.emit({
+              type: "TASK_ASSIGNED",
+              taskId: msg.handoffId,
+              delegator: handoff.from,
+              delegatee: accountName,
+              reason: "handoff_accepted",
+            });
+
             safeWrite(socket, reply(msg, {
               type: "result",
               handoff: { id: handoff.id, payload: payloadWithoutAuto, context, autoContext },
@@ -520,6 +923,16 @@ export function startDaemon(opts?: DaemonOpts): { server: Server; state: DaemonS
           try {
             const capabilities = state.capabilityStore.getAll();
             const skills: string[] = msg.skills ?? [];
+
+            // Enrich capabilities with trust scores from TrustStore
+            if (state.trustStore) {
+              for (const cap of capabilities) {
+                const rep = state.trustStore.get(cap.accountName);
+                if (rep) {
+                  cap.trustScore = rep.trustScore;
+                }
+              }
+            }
 
             let workload: Map<string, number> | undefined;
             try {
@@ -1030,6 +1443,143 @@ export function startDaemon(opts?: DaemonOpts): { server: Server; state: DaemonS
           const results = state.sessionStore.search(msg.query, msg.limit);
           safeWrite(socket, reply(msg, { type: "result", results }));
         },
+
+        report_progress: (msg) => {
+          if (typeof msg.taskId !== "string" || !msg.taskId) {
+            safeWrite(socket, reply(msg, { type: "error", error: "Invalid field: taskId" }));
+            return;
+          }
+          if (typeof msg.percent !== "number" || msg.percent < 0 || msg.percent > 100) {
+            safeWrite(socket, reply(msg, { type: "error", error: "Invalid field: percent" }));
+            return;
+          }
+          const report = state.progressTracker.report({
+            taskId: msg.taskId,
+            agent: msg.agent ?? accountName,
+            percent: msg.percent,
+            currentStep: msg.currentStep ?? "",
+            blockers: msg.blockers,
+            estimatedRemainingMinutes: msg.estimatedRemainingMinutes,
+            artifactsProduced: msg.artifactsProduced,
+          });
+          state.eventBus.emit({
+            type: "PROGRESS_UPDATE",
+            taskId: msg.taskId,
+            agent: msg.agent ?? accountName,
+            data: { percent: msg.percent, currentStep: msg.currentStep ?? "" },
+          });
+          if (msg.percent === 100) {
+            state.eventBus.emit({
+              type: "CHECKPOINT_REACHED",
+              taskId: msg.taskId,
+              agent: msg.agent ?? accountName,
+              percent: 100,
+              step: msg.currentStep ?? "complete",
+            });
+          }
+          safeWrite(socket, reply(msg, { type: "result", report }));
+        },
+
+        council_analyze: async (msg) => {
+          if (!features?.council) {
+            safeWrite(socket, reply(msg, { type: "error", error: "Council feature not enabled" }));
+            return;
+          }
+          if (typeof msg.goal !== "string" || !msg.goal) {
+            safeWrite(socket, reply(msg, { type: "error", error: "Invalid field: goal" }));
+            return;
+          }
+          try {
+            const { CouncilService } = await import("../services/council");
+            const config = councilConfig ?? (await loadConfig()).council;
+            if (!config) {
+              safeWrite(socket, reply(msg, { type: "error", error: "Council not configured (missing council config)" }));
+              return;
+            }
+            const council = new CouncilService(config);
+            const analysis = await council.analyze(msg.goal, msg.context);
+            safeWrite(socket, reply(msg, { type: "result", analysis }));
+          } catch (err: any) {
+            safeWrite(socket, reply(msg, { type: "error", error: err.message }));
+          }
+        },
+
+        get_trust: (msg) => {
+          if (!features?.trust) {
+            safeWrite(socket, reply(msg, { type: "error", error: "Trust feature not enabled" }));
+            return;
+          }
+          if (!state.trustStore) {
+            safeWrite(socket, reply(msg, { type: "error", error: "Trust store not initialized" }));
+            return;
+          }
+          if (msg.account) {
+            const trust = state.trustStore.get(msg.account);
+            safeWrite(socket, reply(msg, { type: "result", trust }));
+          } else {
+            const all = state.trustStore.getAll();
+            safeWrite(socket, reply(msg, { type: "result", trust: all }));
+          }
+        },
+
+        reinstate_agent: (msg) => {
+          if (!state.circuitBreaker) {
+            safeWrite(socket, reply(msg, { type: "error", error: "Circuit breaker not enabled" }));
+            return;
+          }
+          if (typeof msg.account !== "string" || !msg.account) {
+            safeWrite(socket, reply(msg, { type: "error", error: "Invalid field: account" }));
+            return;
+          }
+          const reinstated = state.circuitBreaker.reinstateAgent(msg.account);
+          safeWrite(socket, reply(msg, { type: "result", reinstated }));
+        },
+
+        check_circuit_breaker: (msg) => {
+          if (!state.circuitBreaker) {
+            safeWrite(socket, reply(msg, { type: "error", error: "Circuit breaker not enabled" }));
+            return;
+          }
+          if (msg.account) {
+            const record = state.circuitBreaker.getQuarantineRecord(msg.account);
+            const quarantined = state.circuitBreaker.isQuarantined(msg.account);
+            safeWrite(socket, reply(msg, { type: "result", quarantined, record }));
+          } else {
+            const all = state.circuitBreaker.getAllQuarantined();
+            safeWrite(socket, reply(msg, { type: "result", quarantined: all }));
+          }
+        },
+
+        adaptive_sla_check: async (msg) => {
+          if (!features?.slaEngine) {
+            safeWrite(socket, reply(msg, { type: "error", error: "SLA engine not enabled" }));
+            return;
+          }
+          try {
+            const { AdaptiveCoordinator } = await import("../services/adaptive-coordinator");
+            const board = await loadTasks();
+            const taskStates = board.tasks
+              .filter((t) => t.status === "in_progress")
+              .map((t) => {
+                const startEvent = t.events?.find((e: any) => e.to === "in_progress");
+                const latest = state.progressTracker.getLatest(t.id);
+                return {
+                  taskId: t.id,
+                  status: t.status,
+                  assignee: t.assignee ?? "",
+                  criticality: t.priority as any,
+                  startedAt: startEvent?.timestamp,
+                  lastProgressReport: latest ? { percent: latest.percent, timestamp: latest.timestamp } : undefined,
+                  reassignmentCount: 0,
+                };
+              });
+            const coordinator = new AdaptiveCoordinator(msg.config);
+            const actions = coordinator.evaluate(taskStates);
+            safeWrite(socket, reply(msg, { type: "result", actions }));
+          } catch (err: any) {
+            safeWrite(socket, reply(msg, { type: "error", error: err.message }));
+          }
+        },
       };
 
       const handler = handlers[msg.type];
@@ -1071,17 +1621,25 @@ export function startDaemon(opts?: DaemonOpts): { server: Server; state: DaemonS
     state.sharedSessionManager.purgeInactive(SESSION_PURGE_THRESHOLD_MS);
   }, SESSION_CLEANUP_INTERVAL_MS);
 
-  server.listen(sockPath, () => {
-    // Restrict socket to owner-only access (rw-------)
-    try { chmodSync(sockPath, 0o600); } catch {}
-    writeFileSync(getPidPath(), String(process.pid));
+  await new Promise<void>((resolve, reject) => {
+    server.once("error", (err) => {
+      clearInterval(sessionCleanupTimer);
+      reject(err);
+    });
+    server.listen(sockPath, () => {
+      // Restrict socket to owner-only access (rw-------)
+      try { chmodSync(sockPath, 0o600); } catch {}
+      writeFileSync(getPidPath(), String(process.pid));
+      resolve();
+    });
   });
 
-  return { server, state, sockPath, watchdog, sessionCleanupTimer };
+  return { server, state, sockPath, watchdog, sessionCleanupTimer, entireAdapter };
 }
 
-export function stopDaemon(server: Server, sockPath?: string, watchdog?: { stop: () => void }, sessionCleanupTimer?: ReturnType<typeof setInterval>): void {
+export function stopDaemon(server: Server, sockPath?: string, watchdog?: { stop: () => void }, sessionCleanupTimer?: ReturnType<typeof setInterval>, entireAdapter?: { stopWatching: () => void }): void {
   watchdog?.stop();
+  entireAdapter?.stopWatching();
   if (sessionCleanupTimer) clearInterval(sessionCleanupTimer);
   server.close();
   const sp = sockPath ?? getSockPath();

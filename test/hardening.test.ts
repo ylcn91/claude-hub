@@ -177,7 +177,7 @@ describe("daemon server hardening", () => {
   test("daemon starts and stops cleanly", async () => {
     const { startDaemon, stopDaemon } = await import("../src/daemon/server");
     const sockPath = join(testDir, `test-${Date.now()}.sock`);
-    const { server, state, watchdog } = startDaemon({
+    const { server, state, watchdog } = await startDaemon({
       dbPath: ":memory:",
       sockPath,
     });
@@ -276,7 +276,7 @@ describe("bug regressions", () => {
     mkdirSync(join(process.env.AGENTCTL_DIR, "tokens"), { recursive: true });
 
     const { startDaemon, stopDaemon } = await import("../src/daemon/server");
-    const { server, watchdog } = startDaemon({ dbPath: ":memory:", sockPath });
+    const { server, watchdog } = await startDaemon({ dbPath: ":memory:", sockPath });
     expect(server.listening).toBe(true);
     const { existsSync: exists } = await import("fs");
     expect(exists(nestedDir)).toBe(true);

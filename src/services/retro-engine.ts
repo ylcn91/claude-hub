@@ -1,5 +1,16 @@
 import type { RetroStore, RetroSession } from "./retro-store";
 import type { ActivityStore } from "./activity-store";
+import type { EntireAdapter } from "./entire-adapter";
+
+export interface EntireRetroEvidence {
+  participant: string;
+  sessionId: string;
+  totalTokens: number;
+  tokenBurnRate: number;
+  filesModified: number;
+  checkpointCount: number;
+  durationMinutes: number;
+}
 
 export interface RetroReview {
   author: string;
@@ -28,12 +39,18 @@ export interface RetroDocument {
 export class RetroEngine {
   private collectionTimeouts = new Map<string, Timer>();
   private readonly COLLECTION_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
+  private entireAdapter?: EntireAdapter;
+  private entireMonitoringEnabled: boolean;
 
   constructor(
     private store: RetroStore,
     private activityStore: ActivityStore | undefined,
     private knowledgeStore?: any,
-  ) {}
+    opts?: { entireAdapter?: EntireAdapter; entireMonitoringEnabled?: boolean },
+  ) {
+    this.entireAdapter = opts?.entireAdapter;
+    this.entireMonitoringEnabled = opts?.entireMonitoringEnabled ?? false;
+  }
 
   startRetro(workflowRunId: string, participants: string[], chairman?: string): RetroSession {
     const selectedChairman = chairman ?? participants[0];
@@ -173,6 +190,35 @@ export class RetroEngine {
     const raw = this.store.getDocument(retroId);
     if (!raw) return null;
     return JSON.parse(raw.content);
+  }
+
+  /**
+   * Collect objective metrics from entire.io sessions linked to a workflow run.
+   * Feature gated: only runs when entireMonitoringEnabled is true and an adapter is set.
+   */
+  collectEntireEvidence(_workflowRunId: string, participantSessionMap: Map<string, string>): EntireRetroEvidence[] {
+    if (!this.entireMonitoringEnabled || !this.entireAdapter) {
+      return [];
+    }
+
+    const evidence: EntireRetroEvidence[] = [];
+
+    for (const [participant, sessionId] of participantSessionMap) {
+      const metrics = this.entireAdapter.getSessionMetrics(sessionId);
+      if (!metrics) continue;
+
+      evidence.push({
+        participant,
+        sessionId,
+        totalTokens: metrics.totalTokens,
+        tokenBurnRate: metrics.tokenBurnRate,
+        filesModified: metrics.filesTouched.length,
+        checkpointCount: metrics.stepCount,
+        durationMinutes: metrics.elapsedMinutes,
+      });
+    }
+
+    return evidence;
   }
 
   handleCollectionTimeout(retroId: string): void {

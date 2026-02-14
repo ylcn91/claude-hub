@@ -4,6 +4,7 @@ import {
   CouncilConfig,
   LLMCaller,
   parseJSONFromLLM,
+  calculateAggregateRankings,
 } from "../src/services/council";
 
 function createMockCaller(responses: Map<string, string>): LLMCaller {
@@ -149,6 +150,42 @@ describe("CouncilService.stage1_collectAnalyses", () => {
     expect(analyses).toHaveLength(2);
     expect(analyses.find((a) => a.model === "google/gemini-pro")).toBeUndefined();
   });
+
+  test("handles unparseable LLM response gracefully", async () => {
+    const mockCaller: LLMCaller = async (model, _system, _user) => {
+      if (model === "openai/gpt-4o") {
+        return "I cannot produce JSON right now, sorry.";
+      }
+      return makeStage1Response();
+    };
+
+    const service = new CouncilService(
+      { models: MODELS, chairman: CHAIRMAN },
+      mockCaller
+    );
+
+    const analyses = await service.stage1_collectAnalyses("Build a REST API");
+
+    expect(analyses).toHaveLength(2);
+    expect(analyses.find((a) => a.model === "openai/gpt-4o")).toBeUndefined();
+  });
+
+  test("includes context in prompt when provided", async () => {
+    let capturedPrompt = "";
+    const mockCaller: LLMCaller = async (_model, _system, user) => {
+      capturedPrompt = user;
+      return makeStage1Response();
+    };
+
+    const service = new CouncilService(
+      { models: ["model-a"], chairman: CHAIRMAN },
+      mockCaller
+    );
+
+    await service.stage1_collectAnalyses("Build API", "Using Express.js with PostgreSQL");
+    expect(capturedPrompt).toContain("Build API");
+    expect(capturedPrompt).toContain("Using Express.js with PostgreSQL");
+  });
 });
 
 describe("CouncilService.stage2_peerReview", () => {
@@ -187,6 +224,98 @@ describe("CouncilService.stage2_peerReview", () => {
     expect(rankings[0].reviewer).toBe("anthropic/claude-3.5-sonnet");
     expect(rankings[0].ranking).toEqual([0, 2, 1]);
     expect(rankings[0].reasoning).toContain("thoroughness");
+  });
+
+  test("handles reviewer failure gracefully", async () => {
+    const mockCaller: LLMCaller = async (model, _system, _user) => {
+      if (model === "google/gemini-pro") {
+        throw new Error("Rate limited");
+      }
+      return makeStage2Response([0, 1, 2]);
+    };
+
+    const service = new CouncilService(
+      { models: MODELS, chairman: CHAIRMAN },
+      mockCaller
+    );
+
+    const analyses = MODELS.map((m) => ({
+      model: m,
+      complexity: "medium" as const,
+      estimatedDurationMinutes: 30,
+      requiredSkills: ["ts"],
+      recommendedApproach: "TDD",
+      risks: ["none"],
+    }));
+
+    const rankings = await service.stage2_peerReview("Build API", analyses);
+
+    expect(rankings).toHaveLength(2);
+    expect(rankings.find((r) => r.reviewer === "google/gemini-pro")).toBeUndefined();
+  });
+});
+
+describe("calculateAggregateRankings", () => {
+  test("computes average rank from peer reviews", () => {
+    const models = ["model-a", "model-b", "model-c"];
+    const rankings = [
+      { reviewer: "model-a", ranking: [0, 1, 2], reasoning: "A best" },
+      { reviewer: "model-b", ranking: [0, 2, 1], reasoning: "A best" },
+      { reviewer: "model-c", ranking: [2, 0, 1], reasoning: "C best" },
+    ];
+
+    const aggregate = calculateAggregateRankings(rankings, models);
+
+    expect(aggregate).toHaveLength(3);
+    // Rankings are [best-to-worst index arrays]:
+    //   [0, 1, 2] => model-a rank 1, model-b rank 2, model-c rank 3
+    //   [0, 2, 1] => model-a rank 1, model-c rank 2, model-b rank 3
+    //   [2, 0, 1] => model-c rank 1, model-a rank 2, model-b rank 3
+    // model-a: ranks 1, 1, 2 => avg 4/3 = 1.33
+    const modelA = aggregate.find((a) => a.model === "model-a");
+    expect(modelA?.averageRank).toBe(1.33);
+    expect(modelA?.rankCount).toBe(3);
+    // model-b: ranks 2, 3, 3 => avg 8/3 = 2.67
+    const modelB = aggregate.find((a) => a.model === "model-b");
+    expect(modelB?.averageRank).toBe(2.67);
+    // model-c: ranks 3, 2, 1 => avg 6/3 = 2
+    const modelC = aggregate.find((a) => a.model === "model-c");
+    expect(modelC?.averageRank).toBe(2);
+    // Sorted by average rank (lower is better)
+    expect(aggregate[0].model).toBe("model-a");
+    expect(aggregate[2].model).toBe("model-b");
+  });
+
+  test("handles empty rankings", () => {
+    const aggregate = calculateAggregateRankings([], ["model-a"]);
+    expect(aggregate).toHaveLength(0);
+  });
+
+  test("ignores out-of-bounds indices", () => {
+    const models = ["model-a", "model-b"];
+    const rankings = [
+      { reviewer: "x", ranking: [0, 1, 99], reasoning: "with invalid index" },
+    ];
+
+    const aggregate = calculateAggregateRankings(rankings, models);
+
+    expect(aggregate).toHaveLength(2);
+    expect(aggregate.find((a) => a.model === "model-a")?.averageRank).toBe(1);
+    expect(aggregate.find((a) => a.model === "model-b")?.averageRank).toBe(2);
+  });
+
+  test("handles single reviewer", () => {
+    const models = ["model-a", "model-b"];
+    const rankings = [
+      { reviewer: "model-a", ranking: [1, 0], reasoning: "B is best" },
+    ];
+
+    const aggregate = calculateAggregateRankings(rankings, models);
+
+    expect(aggregate[0].model).toBe("model-b");
+    expect(aggregate[0].averageRank).toBe(1);
+    expect(aggregate[1].model).toBe("model-a");
+    expect(aggregate[1].averageRank).toBe(2);
   });
 });
 
@@ -227,10 +356,23 @@ describe("CouncilService.stage3_synthesize", () => {
     expect(synthesis.confidence).toBe(0.85);
     expect(synthesis.dissenting_views).toContain("One model suggested higher complexity");
   });
+
+  test("throws when chairman response is unparseable", async () => {
+    const mockCaller: LLMCaller = async () => "Not valid JSON at all";
+
+    const service = new CouncilService(
+      { models: MODELS, chairman: CHAIRMAN },
+      mockCaller
+    );
+
+    await expect(
+      service.stage3_synthesize("Build API", [], [])
+    ).rejects.toThrow("Failed to parse chairman synthesis");
+  });
 });
 
 describe("CouncilService.analyze (full pipeline)", () => {
-  test("runs all 3 stages", async () => {
+  test("runs all 3 stages and includes aggregate rankings", async () => {
     const stagesCalled: string[] = [];
 
     const mockCaller: LLMCaller = async (model, system, _user) => {
@@ -264,7 +406,55 @@ describe("CouncilService.analyze (full pipeline)", () => {
     expect(result.timestamp).toBeTruthy();
     expect(result.individualAnalyses).toHaveLength(3);
     expect(result.peerRankings).toHaveLength(3);
+    expect(result.aggregateRankings).toHaveLength(3);
     expect(result.synthesis.chairman).toBe(CHAIRMAN);
     expect(result.synthesis.confidence).toBe(0.85);
+  });
+
+  test("returns fallback when all models fail in stage 1", async () => {
+    const mockCaller: LLMCaller = async () => {
+      throw new Error("All models down");
+    };
+
+    const service = new CouncilService(
+      { models: MODELS, chairman: CHAIRMAN },
+      mockCaller
+    );
+
+    const result = await service.analyze("Build a REST API");
+
+    expect(result.individualAnalyses).toHaveLength(0);
+    expect(result.peerRankings).toHaveLength(0);
+    expect(result.aggregateRankings).toHaveLength(0);
+    expect(result.synthesis.confidence).toBe(0);
+    expect(result.synthesis.recommendedApproach).toContain("all models failed");
+  });
+
+  test("degrades gracefully when some stage 1 models fail", async () => {
+    let callCount = 0;
+    const mockCaller: LLMCaller = async (model, system, _user) => {
+      if (system.includes("task analysis expert")) {
+        callCount++;
+        if (callCount === 1) throw new Error("First model failed");
+        return makeStage1Response();
+      } else if (system.includes("peer reviewer")) {
+        return makeStage2Response([0, 1]);
+      } else if (system.includes("chairman")) {
+        return makeSynthesisResponse();
+      }
+      return "{}";
+    };
+
+    const service = new CouncilService(
+      { models: MODELS, chairman: CHAIRMAN },
+      mockCaller
+    );
+
+    const result = await service.analyze("Build a REST API");
+
+    // One model failed, so only 2 analyses
+    expect(result.individualAnalyses).toHaveLength(2);
+    // Pipeline still completed
+    expect(result.synthesis.chairman).toBe(CHAIRMAN);
   });
 });

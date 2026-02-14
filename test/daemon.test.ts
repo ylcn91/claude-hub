@@ -4,15 +4,26 @@ import { mkdirSync, rmSync } from "fs";
 import { join } from "path";
 
 const TEST_DIR = join(import.meta.dir, ".test-daemon");
-process.env.AGENTCTL_DIR = TEST_DIR;
 
+let savedAgentctlDir: string | undefined;
 let dbCounter = 0;
 function uniqueDbPath(): string {
   return join(TEST_DIR, `test-${++dbCounter}-${Date.now()}.db`);
 }
 
-beforeEach(() => mkdirSync(TEST_DIR, { recursive: true }));
-afterEach(() => rmSync(TEST_DIR, { recursive: true, force: true }));
+beforeEach(() => {
+  savedAgentctlDir = process.env.AGENTCTL_DIR;
+  process.env.AGENTCTL_DIR = TEST_DIR;
+  mkdirSync(TEST_DIR, { recursive: true });
+});
+afterEach(() => {
+  if (savedAgentctlDir === undefined) {
+    delete process.env.AGENTCTL_DIR;
+  } else {
+    process.env.AGENTCTL_DIR = savedAgentctlDir;
+  }
+  rmSync(TEST_DIR, { recursive: true, force: true });
+});
 
 describe("DaemonState", () => {
   test("manages connected accounts", () => {

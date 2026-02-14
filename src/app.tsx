@@ -14,6 +14,10 @@ import Analytics from "./components/Analytics.js";
 import { WorkflowBoard } from "./components/WorkflowBoard.js";
 import { WorkflowDetail } from "./components/WorkflowDetail.js";
 import { HealthDashboard } from "./components/HealthDashboard.js";
+import { CouncilPanel } from "./components/CouncilPanel.js";
+import { VerificationView } from "./components/VerificationView.js";
+import { EntireSessions } from "./components/EntireSessions.js";
+import { DelegationChain } from "./components/DelegationChain.js";
 
 const NAV_KEYS: Record<string, string> = {
   d: "dashboard",
@@ -27,6 +31,10 @@ const NAV_KEYS: Record<string, string> = {
   n: "analytics",
   w: "workflows",
   h: "health",
+  c: "council",
+  v: "verify",
+  i: "entire",
+  g: "chains",
 };
 
 export function App() {
@@ -63,6 +71,10 @@ export function App() {
       {view === "workflows" && <WorkflowBoard onNavigate={(v, detail) => { setViewDetail(detail); setView(v); }} />}
       {view === "workflow_detail" && viewDetail?.runId && <WorkflowDetail runId={viewDetail.runId} onNavigate={setView} />}
       {view === "health" && <HealthDashboard onNavigate={setView} />}
+      {view === "council" && <CouncilPanel onNavigate={setView} />}
+      {view === "verify" && <VerificationView onNavigate={setView} />}
+      {view === "entire" && <EntireSessions onNavigate={setView} />}
+      {view === "chains" && <DelegationChain onNavigate={setView} />}
     </Box>
   );
 }

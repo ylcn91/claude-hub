@@ -158,7 +158,7 @@ export function submitForReview(board: TaskBoard, id: string, wsContext?: Worksp
   };
 }
 
-export function acceptTask(board: TaskBoard, id: string): TaskBoard {
+export function acceptTask(board: TaskBoard, id: string, justification?: string): TaskBoard {
   const task = board.tasks.find((t) => t.id === id);
   if (!task) throw new Error(`Task ${id} not found`);
   if (task.status !== "ready_for_review") {
@@ -169,7 +169,7 @@ export function acceptTask(board: TaskBoard, id: string): TaskBoard {
   const events: TaskEvent[] = [
     ...task.events,
     { type: "status_changed", timestamp: now, from: "ready_for_review", to: "accepted" },
-    { type: "review_accepted", timestamp: now, from: "ready_for_review", to: "accepted" },
+    { type: "review_accepted", timestamp: now, from: "ready_for_review", to: "accepted", reason: justification },
     ...(task.workspaceContext ? [{ type: "cleanup_queued" as TaskEventType, timestamp: now }] : []),
   ];
 

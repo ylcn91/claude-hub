@@ -16,6 +16,7 @@ import { HealthMonitor } from "./health-monitor";
 import { TrustStore } from "./trust-store";
 import { EventBus } from "../services/event-bus";
 import { ProgressTracker } from "../services/progress-tracker";
+import { CircuitBreakerService } from "../services/circuit-breaker";
 
 export interface Message {
   id?: string;
@@ -43,6 +44,7 @@ export class DaemonState {
   retroEngine?: RetroEngine;
   sessionStore?: SessionStore;
   trustStore?: TrustStore;
+  circuitBreaker?: CircuitBreakerService;
   eventBus = new EventBus();
   progressTracker = new ProgressTracker();
   sharedSessionManager = new SharedSessionManager();
@@ -98,6 +100,16 @@ export class DaemonState {
   initTrust(dbPath?: string): void {
     const path = dbPath ?? getTrustDbPath();
     this.trustStore = new TrustStore(path);
+  }
+
+  initCircuitBreaker(): void {
+    this.circuitBreaker = new CircuitBreakerService({
+      eventBus: this.eventBus,
+      trustStore: this.trustStore,
+      progressTracker: this.progressTracker,
+      activityStore: this.activityStore,
+    });
+    this.circuitBreaker.subscribe();
   }
 
   initRetro(dbPath?: string): void {

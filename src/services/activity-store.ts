@@ -14,7 +14,9 @@ export type ActivityEventType =
   | "checkpoint_reached" | "progress_update"
   | "sla_warning" | "sla_breach"
   | "task_verified" | "reassignment"
-  | "trust_update" | "delegation_chain";
+  | "trust_update" | "delegation_chain"
+  | "delegation_reauthorized" | "cognitive_friction_triggered"
+  | "agent_quarantined" | "agent_reinstated";
 
 export interface ActivityEvent {
   id: string;

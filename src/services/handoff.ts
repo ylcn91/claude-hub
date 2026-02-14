@@ -1,6 +1,8 @@
 // F-01: Enriched Handoff Contract Schema
 // Paper ref: Section 2.2 (Task Characteristics), Section 4.1 (Task Decomposition)
 
+import { sanitizeHandoffPayload, sanitizeStringFields, type SanitizationResult } from "./input-sanitizer";
+
 export type ComplexityLevel = "low" | "medium" | "high" | "critical";
 export type CriticalityLevel = "low" | "medium" | "high" | "critical";
 export type UncertaintyLevel = "low" | "medium" | "high";
@@ -65,9 +67,23 @@ function validateEnum(value: unknown, field: string, valid: string[], errors: Ha
   }
 }
 
-export function validateHandoff(payload: unknown): { valid: true; payload: HandoffPayload } | { valid: false; errors: HandoffValidationError[] } {
+export function validateHandoff(payload: unknown): { valid: true; payload: HandoffPayload; sanitization?: SanitizationResult } | { valid: false; errors: HandoffValidationError[] } {
   const errors: HandoffValidationError[] = [];
   const obj = payload as Record<string, unknown> | null | undefined;
+
+  // F-12: Input sanitization — run before structural validation
+  let sanitizationResult: SanitizationResult | undefined;
+  if (obj && typeof obj === "object") {
+    sanitizationResult = sanitizeHandoffPayload(obj);
+    if (!sanitizationResult.safe) {
+      return {
+        valid: false,
+        errors: sanitizationResult.errors.map(e => ({ field: e.field, message: e.message })),
+      };
+    }
+    // Strip control characters from string fields
+    sanitizeStringFields(obj);
+  }
 
   // Required fields
   if (!obj?.goal || typeof obj.goal !== "string" || obj.goal.trim() === "") {
@@ -156,5 +172,9 @@ export function validateHandoff(payload: unknown): { valid: true; payload: Hando
   if (obj!.delegation_depth !== undefined) validated.delegation_depth = obj!.delegation_depth as number;
   if (obj!.parent_handoff_id !== undefined) validated.parent_handoff_id = obj!.parent_handoff_id as string;
 
-  return { valid: true, payload: validated };
+  const result: { valid: true; payload: HandoffPayload; sanitization?: SanitizationResult } = { valid: true, payload: validated };
+  if (sanitizationResult && sanitizationResult.warnings.length > 0) {
+    result.sanitization = sanitizationResult;
+  }
+  return result;
 }

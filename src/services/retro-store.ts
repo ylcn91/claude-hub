@@ -173,7 +173,7 @@ export class RetroStore extends BaseStore {
 
   listSessions(opts?: { limit?: number; workflowRunId?: string }): RetroSession[] {
     let sql = "SELECT * FROM retro_sessions WHERE 1=1";
-    const params: unknown[] = [];
+    const params: (string | number | null)[] = [];
     if (opts?.workflowRunId) {
       sql += " AND workflow_run_id = ?";
       params.push(opts.workflowRunId);
