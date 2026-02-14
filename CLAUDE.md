@@ -10,7 +10,7 @@ bun install && bun link                    # install deps + register `actl` CLI 
 brew tap ylcn91/agentctl && brew install agentctl  # or install via Homebrew
 
 # Development
-bun test                                   # run all 89 test files
+bun test                                   # run all tests (~105 files)
 bun test test/<name>.test.ts               # run a single test file
 bun build --compile src/cli.tsx --outfile dist/actl  # build standalone binary
 
@@ -110,7 +110,7 @@ Search: search_across_accounts
 
 ## Testing
 
-- 89 test files in `test/` (flat directory, not nested under src)
+- 105 test files in `test/` (flat directory, not nested under src)
 - Tests mock file I/O and daemon connections -- no real filesystem or socket needed
 - Use `import { test, expect, describe, beforeEach, mock } from "bun:test"`
 - Mock pattern: `mock.module("../src/services/file-store", () => ({ atomicRead: ..., atomicWrite: ... }))`
@@ -120,6 +120,9 @@ Search: search_across_accounts
 
 - `bun build --compile src/cli.tsx --outfile dist/actl` -- standalone binary
 - `.github/workflows/release.yml` -- builds macOS (arm64/x64) + Linux (x64) binaries on tag push
+- Release flow: push a `v*` tag -> GitHub Actions builds binaries -> creates release -> updates Homebrew formula
+- Check release status: `gh run list --limit 5`
+- Latest tag convention: semver (v0.1.0, v0.2.0, v0.3.0)
 - Auto-updates Homebrew formula at `ylcn91/homebrew-agentctl` on release
 - Requires `HOMEBREW_TAP_TOKEN` secret for formula auto-update
 
@@ -134,3 +137,4 @@ Search: search_across_accounts
 - Provider list has 6 entries: claude-code, codex-cli, openhands, gemini-cli, opencode, cursor-agent
 - Daemon supervisor (`actl daemon supervise`) auto-restarts the daemon on crash
 - `config reload` sends a `config_reload` message over the socket -- requires daemon to be running
+- `COMMANDS` array in `CommandPalette.tsx` is exported and tested for exact count in `test/command-palette.test.ts` -- update the count test when adding/removing commands
