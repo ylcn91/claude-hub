@@ -1,0 +1,132 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+env:
+  TAG_REF: ${{ github.ref }}
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: macos-latest
+            target: darwin-arm64
+          - os: macos-13
+            target: darwin-x64
+          - os: ubuntu-latest
+            target: linux-x64
+
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - run: bun install --frozen-lockfile
+
+      - name: Build standalone binary
+        run: |
+          bun build --compile src/cli.tsx --outfile dist/actl
+          chmod +x dist/actl
+
+      - name: Package binary
+        run: |
+          cd dist
+          tar -czf actl-${{ matrix.target }}.tar.gz actl
+          shasum -a 256 actl-${{ matrix.target }}.tar.gz > actl-${{ matrix.target }}.tar.gz.sha256
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: actl-${{ matrix.target }}
+          path: |
+            dist/actl-${{ matrix.target }}.tar.gz
+            dist/actl-${{ matrix.target }}.tar.gz.sha256
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: |
+            artifacts/actl-darwin-arm64.tar.gz
+            artifacts/actl-darwin-arm64.tar.gz.sha256
+            artifacts/actl-darwin-x64.tar.gz
+            artifacts/actl-darwin-x64.tar.gz.sha256
+            artifacts/actl-linux-x64.tar.gz
+            artifacts/actl-linux-x64.tar.gz.sha256
+
+  update-formula:
+    needs: release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Update Homebrew formula
+        run: |
+          VERSION="${TAG_REF#refs/tags/v}"
+          SHA_ARM64=$(cut -d ' ' -f1 artifacts/actl-darwin-arm64.tar.gz.sha256)
+          SHA_X64=$(cut -d ' ' -f1 artifacts/actl-darwin-x64.tar.gz.sha256)
+          SHA_LINUX=$(cut -d ' ' -f1 artifacts/actl-linux-x64.tar.gz.sha256)
+
+          cat > Formula/agentctl.rb << FORMULA
+          class Agentctl < Formula
+            desc "Multi-account AI agent manager with TUI dashboard"
+            homepage "https://github.com/ylcn91/agentctl"
+            version "${VERSION}"
+            license "MIT"
+
+            on_macos do
+              if Hardware::CPU.arm?
+                url "https://github.com/ylcn91/agentctl/releases/download/v${VERSION}/actl-darwin-arm64.tar.gz"
+                sha256 "${SHA_ARM64}"
+              else
+                url "https://github.com/ylcn91/agentctl/releases/download/v${VERSION}/actl-darwin-x64.tar.gz"
+                sha256 "${SHA_X64}"
+              end
+            end
+
+            on_linux do
+              url "https://github.com/ylcn91/agentctl/releases/download/v${VERSION}/actl-linux-x64.tar.gz"
+              sha256 "${SHA_LINUX}"
+            end
+
+            def install
+              bin.install "actl"
+              bin.install_symlink "actl" => "agentctl"
+            end
+
+            test do
+              assert_match "agentctl", shell_output("#{bin}/actl --help")
+            end
+          end
+          FORMULA
+
+      - name: Commit updated formula
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Formula/agentctl.rb
+          git diff --cached --quiet || git commit -m "chore: update Homebrew formula to ${TAG_REF#refs/tags/}"
+          git push

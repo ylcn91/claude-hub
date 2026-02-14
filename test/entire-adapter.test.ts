@@ -29,6 +29,15 @@ function makeTokenUsage(overrides: Partial<EntireTokenUsage> = {}): EntireTokenU
   };
 }
 
+/** Poll until predicate returns true, or timeout (default 2s) */
+async function waitFor(predicate: () => boolean, timeoutMs = 2000, intervalMs = 50): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (predicate()) return;
+    await new Promise((r) => setTimeout(r, intervalMs));
+  }
+}
+
 describe("EntireAdapter", () => {
   let tmpDir: string;
   let sessionsDir: string;
@@ -454,8 +463,8 @@ describe("EntireAdapter", () => {
         JSON.stringify(makeSession({ session_id: "new-session", phase: "active" }))
       );
 
-      // fs.watch is async, give it time
-      await new Promise((resolve) => setTimeout(resolve, 200));
+      // fs.watch delivery is async and timing varies under load — poll instead of fixed sleep
+      await waitFor(() => emitted.some((e) => e.type === "TASK_STARTED"));
 
       const started = emitted.filter((e) => e.type === "TASK_STARTED");
       expect(started.length).toBe(1);
@@ -477,7 +486,8 @@ describe("EntireAdapter", () => {
       const updatedSession = makeSession({ session_id: "update-test", phase: "active" });
       writeFileSync(join(sessionsDir, "update-test.json"), JSON.stringify(updatedSession));
 
-      await new Promise((resolve) => setTimeout(resolve, 200));
+      // fs.watch delivery is async and timing varies under load — poll instead of fixed sleep
+      await waitFor(() => emitted.some((e) => e.type === "TASK_STARTED"));
 
       const started = emitted.filter((e) => e.type === "TASK_STARTED");
       expect(started.length).toBe(1);
