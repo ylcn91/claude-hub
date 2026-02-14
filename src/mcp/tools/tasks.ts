@@ -104,37 +104,16 @@ export function registerTaskTools(server: McpServer, sendToDaemon: DaemonSender,
       riskNotes: z.array(z.string()).optional().describe("Risk assessment notes"),
     },
   }, async (args) => {
-    // Feature gate: council must be enabled
-    const { loadConfig } = await import("../../config.js");
-    const config = await loadConfig();
-    if (!config.features?.council) {
-      return { content: [{ type: "text" as const, text: JSON.stringify({ error: "Council feature is not enabled. Set features.council = true in config." }) }] };
-    }
-
-    const { verifyTaskCompletion } = await import("../../services/verification-council.js");
-    const { createAccountCaller } = await import("../../services/council.js");
-
-    const llmCaller = createAccountCaller(config.accounts);
-
-    const result = await verifyTaskCompletion(
-      args.taskId,
-      {
-        diff: args.diff,
-        testResults: args.testResults,
-        filesChanged: args.filesChanged,
-        riskNotes: args.riskNotes,
-      },
-      {
-        goal: args.goal,
-        acceptance_criteria: args.acceptance_criteria,
-      },
-      {
-        members: config.council?.members,
-        chairman: config.council?.chairman,
-        llmCaller,
-      },
-    );
-
+    const result = await sendToDaemon({
+      type: "council_verify",
+      taskId: args.taskId,
+      goal: args.goal,
+      acceptance_criteria: args.acceptance_criteria,
+      diff: args.diff,
+      testResults: args.testResults,
+      filesChanged: args.filesChanged,
+      riskNotes: args.riskNotes,
+    });
     return { content: [{ type: "text" as const, text: JSON.stringify(result) }] };
   });
 

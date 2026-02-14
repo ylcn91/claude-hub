@@ -39,8 +39,7 @@ function safeWrite(socket: Socket, data: string): void {
   }
 }
 
-const MAX_PAYLOAD_BYTES = 1_048_576; // 1 MB
-const IDLE_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
+import { MAX_PAYLOAD_BYTES, IDLE_TIMEOUT_MS } from "../constants";
 
 export { DaemonFeatures };
 
@@ -273,10 +272,12 @@ export async function startDaemon(opts?: DaemonOpts): Promise<{ server: Server; 
           const result: unknown = handler(socket, msg);
           if (result instanceof Promise) {
             result.catch((err: any) => {
+              console.error(`[daemon:${msg.type}] async handler error:`, err.message ?? err);
               safeWrite(socket, reply(msg, { type: "error", error: err.message ?? "Internal error" }));
             });
           }
         } catch (err: any) {
+          console.error(`[daemon:${msg.type}] handler error:`, err.message ?? err);
           safeWrite(socket, reply(msg, { type: "error", error: err.message ?? "Internal error" }));
         }
       } else {
@@ -294,6 +295,8 @@ export async function startDaemon(opts?: DaemonOpts): Promise<{ server: Server; 
         return null;
       }
       return parsed.data;
+    }, (err, rawLine) => {
+      console.error(`[daemon] JSON parse error from ${accountName || "unauthenticated"}: ${err.message} — line: ${rawLine.substring(0, 120)}`);
     });
 
     socket.on("data", (data) => {

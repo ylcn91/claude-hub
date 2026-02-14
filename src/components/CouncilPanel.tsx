@@ -1,4 +1,4 @@
-import { useState, useEffect, useContext } from "react";
+import { useState, useEffect, useContext, memo } from "react";
 import { Box, Text, useInput } from "ink";
 import { NavContext } from "../app.js";
 import { useTheme } from "../themes/index.js";
@@ -31,7 +31,7 @@ interface CouncilCache {
   analyses: CouncilAnalysis[];
 }
 
-export function CouncilPanel({ onNavigate }: Props) {
+export const CouncilPanel = memo(function CouncilPanel({ onNavigate }: Props) {
   const { colors } = useTheme();
   const [analyses, setAnalyses] = useState<CouncilAnalysis[]>([]);
   const [loading, setLoading] = useState(true);
@@ -190,7 +190,7 @@ export function CouncilPanel({ onNavigate }: Props) {
       </Box>
     </Box>
   );
-}
+});
 
 function AnalysisDetail({
   analysis,

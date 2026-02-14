@@ -13,9 +13,11 @@ describe("CouncilPanel", () => {
     expect(lastFrame()).toContain("Loading");
   });
 
-  test("exports a named function component", async () => {
+  test("exports a callable component (memo-wrapped)", async () => {
     const mod = await import("../src/components/CouncilPanel");
-    expect(typeof mod.CouncilPanel).toBe("function");
+    // React.memo wraps the component — typeof may be "object" (memo node) or "function"
+    expect(mod.CouncilPanel).toBeTruthy();
+    expect(typeof mod.CouncilPanel === "function" || typeof mod.CouncilPanel === "object").toBe(true);
   });
 });
 
@@ -30,9 +32,10 @@ describe("VerificationView", () => {
     expect(lastFrame()).toContain("Loading");
   });
 
-  test("exports a named function component", async () => {
+  test("exports a callable component (memo-wrapped)", async () => {
     const mod = await import("../src/components/VerificationView");
-    expect(typeof mod.VerificationView).toBe("function");
+    expect(mod.VerificationView).toBeTruthy();
+    expect(typeof mod.VerificationView === "function" || typeof mod.VerificationView === "object").toBe(true);
   });
 });
 
@@ -67,9 +70,10 @@ describe("DelegationChain", () => {
     expect(frame).toBeTruthy();
   });
 
-  test("exports a named function component", async () => {
+  test("exports a callable component (memo-wrapped)", async () => {
     const mod = await import("../src/components/DelegationChain");
-    expect(typeof mod.DelegationChain).toBe("function");
+    expect(mod.DelegationChain).toBeTruthy();
+    expect(typeof mod.DelegationChain === "function" || typeof mod.DelegationChain === "object").toBe(true);
   });
 });
 

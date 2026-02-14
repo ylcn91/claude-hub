@@ -1,4 +1,5 @@
 import { existsSync } from "fs";
+import { sanitizeShellCommand } from "./input-sanitizer.js";
 
 export interface RunResult {
   command: string;
@@ -52,8 +53,21 @@ export async function runAcceptanceSuite(
   const results: RunResult[] = [];
 
   for (const command of commands) {
+    // Validate command before execution
+    const check = sanitizeShellCommand(command);
+    if (!check.safe) {
+      results.push({
+        command,
+        exitCode: -2,
+        stdout: "",
+        stderr: `Command rejected: ${check.reason}`,
+        durationMs: 0,
+      });
+      continue;
+    }
+
     const start = Date.now();
-    const proc = Bun.spawn(["sh", "-c", command], {
+    const proc = Bun.spawn(["sh", "-c", check.command], {
       cwd: workDir,
       stdout: "pipe",
       stderr: "pipe",

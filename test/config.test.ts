@@ -161,6 +161,99 @@ describe("migrateConfig", () => {
   });
 });
 
+describe("migrateConfig: detailed value preservation", () => {
+  test("v0 migration preserves all account fields", async () => {
+    writeFileSync(TEST_CONFIG, JSON.stringify({
+      accounts: [
+        {
+          name: "dev",
+          configDir: "~/.claude-dev",
+          color: "#89b4fa",
+          label: "Development",
+          provider: "claude-code",
+          quotaPolicy: { plan: "max-20x", windowMs: 36000000, estimatedLimit: 450, source: "custom" },
+        },
+        {
+          name: "ops",
+          configDir: "~/.claude-ops",
+          color: "#f38ba8",
+          label: "Operations",
+          provider: "codex-cli",
+        },
+      ],
+    }));
+
+    const { migrated } = await migrateConfig(TEST_CONFIG);
+    expect(migrated).toBe(true);
+
+    const config = await loadConfig(TEST_CONFIG);
+    expect(config.accounts).toHaveLength(2);
+    // First account preserves all fields including quotaPolicy
+    expect(config.accounts[0].name).toBe("dev");
+    expect(config.accounts[0].configDir).toBe("~/.claude-dev");
+    expect(config.accounts[0].color).toBe("#89b4fa");
+    expect(config.accounts[0].label).toBe("Development");
+    expect(config.accounts[0].provider).toBe("claude-code");
+    // Second account
+    expect(config.accounts[1].name).toBe("ops");
+    expect(config.accounts[1].provider).toBe("codex-cli");
+  });
+
+  test("v0 migration preserves feature flags if present", async () => {
+    writeFileSync(TEST_CONFIG, JSON.stringify({
+      accounts: [],
+      features: { workflow: true, council: true, sessions: false },
+    }));
+
+    const { migrated } = await migrateConfig(TEST_CONFIG);
+    expect(migrated).toBe(true);
+
+    const config = await loadConfig(TEST_CONFIG);
+    expect(config.features?.workflow).toBe(true);
+    expect(config.features?.council).toBe(true);
+    expect(config.features?.sessions).toBe(false);
+  });
+
+  test("v0 migration preserves custom entire settings", async () => {
+    writeFileSync(TEST_CONFIG, JSON.stringify({
+      accounts: [],
+      entire: { autoEnable: false },
+    }));
+
+    const { migrated } = await migrateConfig(TEST_CONFIG);
+    expect(migrated).toBe(true);
+
+    const config = await loadConfig(TEST_CONFIG);
+    // Custom entire.autoEnable should be preserved (overrides default)
+    expect(config.entire.autoEnable).toBe(false);
+  });
+
+  test("backup file contains original v0 data", async () => {
+    const originalData = {
+      accounts: [{ name: "backup-test", configDir: "~/.claude-backup", color: "#cba6f7", label: "Backup", provider: "claude-code" }],
+    };
+    writeFileSync(TEST_CONFIG, JSON.stringify(originalData));
+
+    const { backupPath } = await migrateConfig(TEST_CONFIG);
+    expect(backupPath).not.toBeNull();
+
+    // Read backup and verify it has the original data
+    const { readFileSync } = await import("fs");
+    const backupContent = JSON.parse(readFileSync(backupPath!, "utf-8"));
+    expect(backupContent.accounts[0].name).toBe("backup-test");
+    // Backup should NOT have schemaVersion (it's the original v0 data)
+    expect(backupContent.schemaVersion).toBeUndefined();
+  });
+
+  test("corrupt config returns no migration (atomicRead returns null)", async () => {
+    writeFileSync(TEST_CONFIG, "{{not valid json at all!!!");
+
+    const { migrated, backupPath } = await migrateConfig(TEST_CONFIG);
+    expect(migrated).toBe(false);
+    expect(backupPath).toBeNull();
+  });
+});
+
 describe("loadConfig edge cases", () => {
   test("tolerates missing entire field", async () => {
     writeFileSync(TEST_CONFIG, JSON.stringify({

@@ -1,4 +1,4 @@
-import { useState, useEffect, useContext } from "react";
+import { useState, useEffect, useContext, memo } from "react";
 import { Box, Text, useInput } from "ink";
 import { NavContext } from "../app.js";
 import { useTheme } from "../themes/index.js";
@@ -33,7 +33,7 @@ function renderTree(chain: string[], maxDepth: number, blocked: boolean): Delega
   }));
 }
 
-export function DelegationChain({ onNavigate }: Props) {
+export const DelegationChain = memo(function DelegationChain({ onNavigate }: Props) {
   const { colors } = useTheme();
   const [chains, setChains] = useState<DelegationChainData[]>([]);
   const [loading, setLoading] = useState(true);
@@ -161,4 +161,4 @@ export function DelegationChain({ onNavigate }: Props) {
       )}
     </Box>
   );
-}
+});

@@ -1,4 +1,5 @@
 import { BaseStore } from "./base-store";
+import { sanitizeFTS5Query } from "../services/input-sanitizer";
 
 export type KnowledgeCategory = "prompt" | "handoff" | "task_event" | "decision_note" | "message";
 
@@ -97,16 +98,8 @@ export class KnowledgeStore extends BaseStore {
     return { ...entry, id, indexedAt };
   }
 
-  private sanitizeQuery(query: string): string {
-    return query
-      .split(/\s+/)
-      .filter(Boolean)
-      .map(term => `"${term.replace(/"/g, '""')}"`)
-      .join(' ');
-  }
-
   search(query: string, category?: KnowledgeCategory, limit: number = 20): SearchResult[] {
-    const sanitized = this.sanitizeQuery(query);
+    const sanitized = sanitizeFTS5Query(query);
     if (!sanitized) return [];
 
     let sql: string;

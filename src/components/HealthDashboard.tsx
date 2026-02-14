@@ -1,4 +1,4 @@
-import { useState, useEffect, useContext } from "react";
+import { useState, useEffect, useContext, memo } from "react";
 import { Box, Text, useInput } from "ink";
 import { NavContext } from "../app.js";
 import { useTheme } from "../themes/index.js";
@@ -17,7 +17,7 @@ const STATUS_DOTS: Record<string, string> = {
   critical: "\u25CF",
 };
 
-export function HealthDashboard({ onNavigate }: Props) {
+export const HealthDashboard = memo(function HealthDashboard({ onNavigate }: Props) {
   const { colors } = useTheme();
   const [statuses, setStatuses] = useState<AccountHealth[]>([]);
   const [loading, setLoading] = useState(true);
@@ -113,4 +113,4 @@ export function HealthDashboard({ onNavigate }: Props) {
       )}
     </Box>
   );
-}
+});

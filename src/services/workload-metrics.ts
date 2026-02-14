@@ -8,7 +8,7 @@ export interface WorkloadSnapshot {
 }
 
 const TERMINAL_STATUSES: TaskStatus[] = ["accepted", "rejected"];
-const THROUGHPUT_WINDOW_MS = 60 * 60 * 1000;
+import { THROUGHPUT_WINDOW_MS } from "../constants";
 
 export function computeWorkloadSnapshots(board: TaskBoard): Map<string, WorkloadSnapshot> {
   const now = Date.now();

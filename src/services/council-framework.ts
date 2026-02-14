@@ -98,11 +98,27 @@ export function buildProviderCommand(account: AccountConfig, _prompt: string): P
   }
 }
 
-export function createAccountCaller(accounts: AccountConfig[]): LLMCaller {
+export const DEFAULT_TIMEOUT_MS = 30_000;
+
+export class LLMTimeoutError extends Error {
+  public readonly account: string;
+  public readonly timeoutMs: number;
+
+  constructor(account: string, timeoutMs: number) {
+    super(`Account ${account} LLM call timed out after ${timeoutMs}ms`);
+    this.name = "LLMTimeoutError";
+    this.account = account;
+    this.timeoutMs = timeoutMs;
+  }
+}
+
+export function createAccountCaller(accounts: AccountConfig[], timeoutMs?: number): LLMCaller {
   const accountMap = new Map<string, AccountConfig>();
   for (const acc of accounts) {
     accountMap.set(acc.name, acc);
   }
+
+  const effectiveTimeout = timeoutMs ?? DEFAULT_TIMEOUT_MS;
 
   return async (accountName: string, systemPrompt: string, userPrompt: string): Promise<string> => {
     const account = accountMap.get(accountName);
@@ -120,15 +136,26 @@ export function createAccountCaller(accounts: AccountConfig[]): LLMCaller {
       env: { ...process.env, ...env },
     });
 
-    const stdout = await new Response(proc.stdout).text();
-    const exitCode = await proc.exited;
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      setTimeout(() => {
+        proc.kill();
+        reject(new LLMTimeoutError(accountName, effectiveTimeout));
+      }, effectiveTimeout);
+    });
 
-    if (exitCode !== 0) {
-      const stderr = await new Response(proc.stderr).text();
-      throw new Error(`Account ${accountName} CLI exited with code ${exitCode}: ${stderr.slice(0, 500)}`);
-    }
+    const resultPromise = (async () => {
+      const stdout = await new Response(proc.stdout).text();
+      const exitCode = await proc.exited;
 
-    return parseOutput(stdout.trim());
+      if (exitCode !== 0) {
+        const stderr = await new Response(proc.stderr).text();
+        throw new Error(`Account ${accountName} CLI exited with code ${exitCode}: ${stderr.slice(0, 500)}`);
+      }
+
+      return parseOutput(stdout.trim());
+    })();
+
+    return Promise.race([resultPromise, timeoutPromise]);
   };
 }
 

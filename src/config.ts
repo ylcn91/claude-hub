@@ -58,6 +58,7 @@ const HubConfigSchema = z.object({
   council: z.object({
     members: z.array(z.string()),
     chairman: z.string(),
+    timeoutMs: z.number().int().min(1000).optional(),
   }).optional(),
   theme: z.string().optional(),
   delegationDepth: z.object({

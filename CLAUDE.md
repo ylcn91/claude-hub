@@ -10,7 +10,7 @@ bun install && bun link                    # install deps + register `actl` CLI 
 brew tap ylcn91/agentctl && brew install agentctl  # or install via Homebrew
 
 # Development
-bun test                                   # run all tests (~105 files)
+bun test                                   # run all tests (~124 files)
 bun test test/<name>.test.ts               # run a single test file
 bun build --compile src/cli.tsx --outfile dist/actl  # build standalone binary
 
@@ -64,8 +64,9 @@ Key directories:
 - `src/components/` -- Dashboard, TaskBoard, MessageInbox, SLABoard, CouncilPanel, DelegationChain, HealthDashboard, HelpOverlay, VerificationView, WorkflowBoard, WorkflowDetail, Analytics, PromptLibrary, EntireSessions, CommandPalette, Sidebar, etc.
 - `src/themes/` -- Theme system: `types.ts` (theme type definitions), `definitions.ts` (15 built-in themes), `index.ts` (exports & useTheme hook)
 - `src/daemon/` -- Unix socket server, state, framing, stores (message, workspace, capability, knowledge, session, trust), health-monitor, watchdog, supervisor, config-watcher, shared-session
-- `src/mcp/` -- MCP bridge (`bridge.ts`) + 56 tool registrations (`tools.ts`)
-- `src/services/` -- Business logic (48 modules): account-manager, tasks, handoff, sla-engine, council, event-bus, circuit-breaker, cognitive-friction, verification-council, verification-receipts, adaptive-coordinator, progress-tracker, delegation-depth, provider-profiles, input-sanitizer, workflow-engine, workflow-parser, retro-engine, analytics, etc.
+- `src/mcp/` -- MCP bridge (`bridge.ts`) + tool registrations split into `tools/` domain modules (messaging, handoff, tasks, workspace, prompts, github, review, knowledge, analytics, workflow, retro, health, sessions, search)
+- `src/services/` -- Business logic (50+ modules): account-manager, tasks, handoff, sla-engine, council, council-store, event-bus, circuit-breaker, cognitive-friction, verification-council, verification-receipts, adaptive-coordinator, progress-tracker, delegation-depth, provider-profiles, input-sanitizer, workflow-engine, workflow-parser, retro-engine, analytics, etc.
+- `src/constants.ts` -- Centralized numeric constants for daemon, protocol, and infrastructure (timeouts, payload limits, reconnect bounds)
 - `src/providers/` -- claude-code, codex-cli, openhands, gemini-cli, opencode, cursor-agent (6 providers)
 - `src/terminals/` -- WezTerm, iTerm2, GNOME, Windows Terminal
 - `src/integrations/` -- GitHub issue/PR linking, WezTerm integration
@@ -80,16 +81,17 @@ Key directories:
 
 - **File store**: `src/services/file-store.ts` provides `atomicWrite`/`atomicRead` with advisory locking (mkdir-based), plus `acquireLock`, `backupFile`, `cleanTempFiles` -- use for all JSON persistence
 - **Config**: `src/config.ts` validates with Zod schemas, uses `loadConfig()`/`saveConfig()` -- never read config JSON directly. Supports `setConfigValue(dotPath, value)` for CLI, `migrateConfig()` for schema upgrades with automatic backup
-- **Daemon protocol**: Newline-delimited JSON over Unix socket. First message must be `auth` with account+token. Max payload 1 MB, idle timeout 30 min. See `src/daemon/framing.ts` for `createLineParser`/`frameSend`/`generateRequestId`
+- **Daemon protocol**: Newline-delimited JSON over Unix socket. First message must be `auth` with account+token. Max payload 1 MB, idle timeout 30 min. See `src/daemon/framing.ts` for `createLineParser`/`frameSend`/`generateRequestId`. Protocol constants in `src/constants.ts`. Message schemas validated via `DaemonMessageSchema` discriminated union in `src/daemon/schemas.ts`. `createLineParser` accepts optional `onError` callback for parse failure visibility
 - **Feature flags**: Gated via `config.features?.flagName` (see `FeatureFlags` in `types.ts`). All flags: `workspaceWorktree`, `autoAcceptance`, `capabilityRouting`, `slaEngine`, `githubIntegration`, `reviewBundles`, `knowledgeIndex`, `reliability`, `workflow`, `retro`, `sessions`, `trust`, `council`, `circuitBreaker`, `cognitiveFriction`, `entireMonitoring`
 - **Paths**: All file paths computed in `src/paths.ts` via getter functions. Override base dir with `AGENTCTL_DIR` env var. Paths include: config, socket, PID, tokens, messages, workspaces, capabilities, knowledge, prompts, handoff-templates, clipboard, external-links, review-bundles, activity, workflow, retro, sessions, trust, receipt-key
 - **Task lifecycle**: `todo -> in_progress -> ready_for_review -> accepted/rejected`. Rejection bounces back to `in_progress` automatically. Enforced transitions in `src/services/tasks.ts` via `VALID_TRANSITIONS` map. Tasks support priority (P0/P1/P2), due dates, tags, workspace context, and event history
 - **Event bus**: `src/services/event-bus.ts` defines a discriminated union of delegation lifecycle events (TASK_CREATED, TASK_ASSIGNED, CHECKPOINT_REACHED, PROGRESS_UPDATE, etc.). Used for observability across the system
-- **Council**: Multi-account analysis (`src/services/council.ts`) and verification (`src/services/verification-council.ts`). Uses registered accounts' CLI tools in non-interactive mode (e.g., `claude -p`, `codex -q`, `opencode run`). Config: `council.members` (array of account names), `council.chairman` (chairman account). Feature-gated on `council` flag
+- **Council**: Multi-account analysis (`src/services/council.ts`) and verification (`src/services/verification-council.ts`). Both flows route through daemon handlers (`src/daemon/handlers/council.ts`) for consistent feature-flag gating. LLM timeout enforced via `Promise.race` in `council-framework.ts` (configurable `timeoutMs`, default 30s). Results persisted via `src/services/council-store.ts` for CouncilPanel UI history. Config: `council.members`, `council.chairman`, `council.timeoutMs`. Feature-gated on `council` flag
 - **Themes**: 15 built-in themes in `src/themes/`. Config: `theme?: string` field in HubConfig. Set via `actl config set theme "tokyonight"`. All 24 components use `useTheme()` hook
 - **Command Palette**: `Ctrl+P` opens fuzzy-search overlay for all views and actions (`src/components/CommandPalette.tsx`)
 - **Leader Keys**: `Ctrl+X` prefix with 500ms chord timeout. `Ctrl+X b` toggles info sidebar, `Ctrl+X p` opens command palette
-- **Input sanitizer**: `src/services/input-sanitizer.ts` -- validate/sanitize all external inputs
+- **Input sanitizer**: `src/services/input-sanitizer.ts` -- validate/sanitize all external inputs. Includes `sanitizeShellCommand()` for acceptance runner (blocks injection patterns), `sanitizeSearchQuery()` for search stores, and `sanitizeHandoffPayload()` for handoff validation
+- **CLI validation**: All CLI commands validate inputs via Zod schemas in `src/daemon/schemas.ts` (ConfigSetArgsSchema, SessionNameArgsSchema, LaunchDirSchema, SearchPatternSchema, AddAccountArgsSchema) before passing to services
 
 ## MCP Tools (56 registered)
 
@@ -110,8 +112,8 @@ Search: search_across_accounts
 
 ## Testing
 
-- 105 test files in `test/` (flat directory, not nested under src)
-- Tests mock file I/O and daemon connections -- no real filesystem or socket needed
+- 124 test files in `test/` (flat directory, not nested under src)
+- Tests mock file I/O and daemon connections -- some tests (auth-reconnect, council-framework) use real Unix sockets and real processes for behavioral verification
 - Use `import { test, expect, describe, beforeEach, mock } from "bun:test"`
 - Mock pattern: `mock.module("../src/services/file-store", () => ({ atomicRead: ..., atomicWrite: ... }))`
 - Test helpers in `test/helpers/` and `test/fixtures/`
@@ -129,12 +131,12 @@ Search: search_across_accounts
 ## Gotchas
 
 - The binary is `actl` or `agentctl` (both work via package.json `bin`)
-- `execa` is a dependency used only in `src/poc.tsx` -- prefer `Bun.$` for new shell commands
 - Config lives at `~/.agentctl/config.json`, socket at `~/.agentctl/hub.sock`
 - Account tokens are per-file at `~/.agentctl/tokens/<name>.token` -- verified with `timingSafeEqual`
-- `entireMonitoring` feature flag exists in `FeatureFlags` type but is NOT in the Zod config schema -- adding it to the schema requires updating `HubConfigSchema` in `config.ts`
 - Rejected tasks auto-bounce to `in_progress` (not a terminal state) -- see `rejectTask()` in `tasks.ts`
 - Provider list has 6 entries: claude-code, codex-cli, openhands, gemini-cli, opencode, cursor-agent
 - Daemon supervisor (`actl daemon supervise`) auto-restarts the daemon on crash
 - `config reload` sends a `config_reload` message over the socket -- requires daemon to be running
 - `COMMANDS` array in `CommandPalette.tsx` is exported and tested for exact count in `test/command-palette.test.ts` -- update the count test when adding/removing commands
+- Large TUI components use `React.memo()` -- `typeof` check returns "object" not "function"; use `expect(Component).toBeTruthy()` in tests
+- Daemon handler modules live in `src/daemon/handlers/` (messaging, handoff, tasks, workspace, council, knowledge, sessions, workflow, health, misc) -- add new handlers there, not in server.ts

@@ -6,6 +6,25 @@ export function registerMiscHandlers(ctx: HandlerContext): Record<string, Handle
   const { state, safeWrite, reply, getAccountName } = ctx;
 
   return {
+    query_activity: (socket: Socket, msg: any) => {
+      if (!state.activityStore) {
+        safeWrite(socket, reply(msg, { type: "error", error: "Activity store not enabled" }));
+        return;
+      }
+      try {
+        const events = state.activityStore.query({
+          type: msg.activityType,
+          account: msg.account,
+          workflowRunId: msg.workflowRunId,
+          since: msg.since,
+          limit: msg.limit ?? 50,
+        });
+        safeWrite(socket, reply(msg, { type: "result", events }));
+      } catch (err: any) {
+        safeWrite(socket, reply(msg, { type: "error", error: err.message }));
+      }
+    },
+
     config_reload: async (socket: Socket, msg: any) => {
       try {
         const config = await loadConfig();

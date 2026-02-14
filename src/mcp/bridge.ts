@@ -11,11 +11,7 @@ function getDaemonSockPath() { return getSockPath(); }
 function getDaemonPidPath() { return getPidPath(); }
 function getDaemonTokensDir() { return getTokensDir(); }
 
-const MCP_REQUEST_TIMEOUT_MS = 5_000;
-const DAEMON_START_TIMEOUT_MS = 3_000;
-const DAEMON_START_POLL_MS = 100;
-const MAX_RECONNECT_ATTEMPTS = 5;
-const RECONNECT_MAX_DELAY_MS = 30_000;
+import { MCP_REQUEST_TIMEOUT_MS, DAEMON_START_TIMEOUT_MS, DAEMON_START_POLL_MS, MAX_RECONNECT_ATTEMPTS, RECONNECT_MAX_DELAY_MS } from "../constants";
 
 function getToken(account: string): string {
   const tokenPath = `${getDaemonTokensDir()}/${account}.token`;

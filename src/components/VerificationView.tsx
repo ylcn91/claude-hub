@@ -1,4 +1,4 @@
-import { useState, useEffect, useContext } from "react";
+import { useState, useEffect, useContext, memo } from "react";
 import { Box, Text, useInput } from "ink";
 import { NavContext } from "../app.js";
 import { useTheme } from "../themes/index.js";
@@ -26,7 +26,7 @@ interface VerificationCache {
   results: VerificationResult[];
 }
 
-export function VerificationView({ onNavigate }: Props) {
+export const VerificationView = memo(function VerificationView({ onNavigate }: Props) {
   const { colors } = useTheme();
   const [results, setResults] = useState<VerificationResult[]>([]);
   const [loading, setLoading] = useState(true);
@@ -169,7 +169,7 @@ export function VerificationView({ onNavigate }: Props) {
       </Box>
     </Box>
   );
-}
+});
 
 function VerificationDetail({
   result,

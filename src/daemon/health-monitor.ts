@@ -24,7 +24,7 @@ export interface AggregateHealthStatus {
   accounts: AccountHealth[];
 }
 
-const STALE_THRESHOLD_MS = 10 * 60 * 1000; // 10 minutes
+import { STALE_THRESHOLD_MS } from "../constants";
 
 export class HealthMonitor {
   private healthMap = new Map<string, AccountHealth>();

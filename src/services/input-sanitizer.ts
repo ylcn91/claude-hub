@@ -258,6 +258,78 @@ export function sanitizeMCPText(
   return { safe: true, sanitized, warnings };
 }
 
+// Max command length for acceptance runner commands
+const MAX_SHELL_COMMAND_LENGTH = 2_000;
+
+// Dangerous shell metacharacters that indicate command chaining or injection
+const DANGEROUS_SHELL_PATTERNS: { pattern: RegExp; description: string }[] = [
+  { pattern: /`[^`]*`/, description: "backtick command substitution" },
+  { pattern: /\$\(/, description: "$() command substitution" },
+  { pattern: /\$\{/, description: "${} variable expansion" },
+  { pattern: /;/, description: "command chaining with semicolon" },
+  { pattern: /\|/, description: "pipe operator" },
+  { pattern: /&&/, description: "AND chaining (&&)" },
+  { pattern: /\|\|/, description: "OR chaining (||)" },
+  { pattern: />\s*>?/, description: "output redirection" },
+  { pattern: /</, description: "input redirection" },
+  { pattern: /\x00/, description: "null byte" },
+];
+
+/**
+ * Validate a shell command for the acceptance runner.
+ * Rejects commands with dangerous shell metacharacters using an allowlist approach:
+ * only permits simple command patterns (binary + arguments, no chaining/piping/redirection).
+ *
+ * Returns { safe, command, reason } where:
+ * - safe=true if the command passes all checks
+ * - safe=false with reason describing why the command was rejected
+ */
+export function sanitizeShellCommand(command: string): { safe: boolean; command: string; reason?: string } {
+  // Check for empty/whitespace-only commands
+  if (!command || command.trim().length === 0) {
+    return { safe: false, command, reason: "Empty command" };
+  }
+
+  // Check max length
+  if (command.length > MAX_SHELL_COMMAND_LENGTH) {
+    return { safe: false, command, reason: `Command exceeds maximum length of ${MAX_SHELL_COMMAND_LENGTH} characters (got ${command.length})` };
+  }
+
+  // Check for dangerous shell metacharacters
+  for (const { pattern, description } of DANGEROUS_SHELL_PATTERNS) {
+    if (pattern.test(command)) {
+      return { safe: false, command, reason: `Dangerous shell pattern detected: ${description}` };
+    }
+  }
+
+  // Check for control characters (except normal whitespace)
+  // eslint-disable-next-line no-control-regex
+  if (/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/.test(command)) {
+    return { safe: false, command, reason: "Command contains control characters" };
+  }
+
+  return { safe: true, command: command.trim() };
+}
+
+/**
+ * Sanitize a free-text search query for SQLite FTS5.
+ * Splits into terms, escapes double-quotes, filters degenerate inputs,
+ * and wraps each term in double-quotes so FTS5 treats them as literals.
+ */
+export function sanitizeFTS5Query(query: string): string {
+  const terms = query
+    .split(/\s+/)
+    .filter(Boolean)
+    .map(term => term.replace(/"/g, '""'))
+    .filter(term => {
+      // Guard against degenerate inputs: only-quotes or empty after cleaning
+      const stripped = term.replace(/""/g, "");
+      return stripped.length > 0;
+    })
+    .map(term => `"${term}"`);
+  return terms.join(" ");
+}
+
 /**
  * Strip control characters from all string fields in the payload, mutating it in place.
  * Returns the same object for convenience.

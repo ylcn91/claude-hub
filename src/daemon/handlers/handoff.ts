@@ -36,7 +36,7 @@ export function registerHandoffHandlers(ctx: HandlerContext): Record<string, Han
           if (cfg.defaults?.maxDelegationDepth != null) {
             depthConfig = { maxDepth: cfg.defaults.maxDelegationDepth };
           }
-        } catch { /* config load is best-effort */ }
+        } catch (err) { console.warn("[daemon:handoff] config load failed:", err instanceof Error ? err.message : err); }
       }
       const depthCheck = checkDelegationDepth(validation.payload, depthConfig);
 
@@ -244,7 +244,7 @@ export function registerHandoffHandlers(ctx: HandlerContext): Record<string, Han
           for (const [name, snap] of snapshots) {
             workload.set(name, computeWorkloadModifier(snap));
           }
-        } catch { /* workload enrichment is best-effort */ }
+        } catch (err) { console.warn("[daemon:suggest_assignee] workload enrichment failed:", err instanceof Error ? err.message : err); }
 
         const scores = rankAccounts(capabilities, skills, {
           excludeAccounts: msg.excludeAccounts,

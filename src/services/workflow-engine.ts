@@ -1,6 +1,7 @@
 import type { WorkflowStore } from "./workflow-store";
 import type { ActivityStore } from "./activity-store";
 import type { WorkflowDefinition } from "./workflow-parser";
+import { validateDAG } from "./workflow-parser";
 import type { RetroEngine } from "./retro-engine";
 import { evaluateCondition, type EvalContext } from "./condition-evaluator";
 
@@ -14,6 +15,10 @@ export class WorkflowEngine {
   ) {}
 
   async triggerWorkflow(definition: WorkflowDefinition, context: string): Promise<string> {
+    // Validate dependency graph before execution — catches cycles even when
+    // the definition was constructed programmatically (not via parseWorkflow).
+    validateDAG(definition.steps);
+
     const now = new Date().toISOString();
 
     const run = this.store.createRun({

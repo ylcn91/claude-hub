@@ -1,15 +1,29 @@
 import { connect } from "net";
-import { readFileSync, existsSync } from "fs";
 import { createLineParser, generateRequestId, frameSend } from "../daemon/framing";
 
 import { getHubDir, getSockPath } from "../paths";
+import { DAEMON_CLIENT_TIMEOUT_MS } from "../constants";
 
 
-function getToken(account: string): string | null {
+async function getToken(account: string): Promise<string | null> {
   try {
-    return readFileSync(`${getHubDir()}/tokens/${account}.token`, "utf-8").trim();
+    const file = Bun.file(`${getHubDir()}/tokens/${account}.token`);
+    if (!(await file.exists())) return null;
+    return (await file.text()).trim();
   } catch {
     return null; /* token file missing or unreadable */
+  }
+}
+
+async function socketExists(): Promise<boolean> {
+  try {
+    // Bun.file().exists() only works for regular files, not Unix sockets.
+    // Use fs.access to detect socket existence.
+    const { access } = await import("node:fs/promises");
+    await access(getSockPath());
+    return true;
+  } catch {
+    return false;
   }
 }
 
@@ -25,17 +39,17 @@ interface DaemonMessage {
 }
 
 export async function fetchUnreadMessages(account: string): Promise<DaemonMessage[]> {
-  const token = getToken(account);
+  const token = await getToken(account);
   if (!token) return [];
 
   const sockPath = getSockPath();
-  if (!existsSync(sockPath)) return [];
+  if (!(await socketExists())) return [];
 
   return new Promise((resolve) => {
     const timeout = setTimeout(() => {
       try { socket.destroy(); } catch { /* socket already destroyed or errored */ }
       resolve([]);
-    }, 2000);
+    }, DAEMON_CLIENT_TIMEOUT_MS);
 
     const pending = new Map<string, { resolve: Function }>();
 
@@ -81,17 +95,17 @@ export async function fetchUnreadMessages(account: string): Promise<DaemonMessag
 }
 
 export async function fetchUnreadCount(account: string): Promise<number> {
-  const token = getToken(account);
+  const token = await getToken(account);
   if (!token) return 0;
 
   const sockPath = getSockPath();
-  if (!existsSync(sockPath)) return 0;
+  if (!(await socketExists())) return 0;
 
   return new Promise((resolve) => {
     const timeout = setTimeout(() => {
       try { socket.destroy(); } catch { /* socket already destroyed or errored */ }
       resolve(0);
-    }, 2000);
+    }, DAEMON_CLIENT_TIMEOUT_MS);
 
     const pending = new Map<string, { resolve: Function }>();
 
@@ -151,17 +165,17 @@ export async function fetchUnreadCounts(accounts: string[]): Promise<Map<string,
 }
 
 export async function fetchActiveSession(account: string): Promise<{ initiator: string; participant: string } | null> {
-  const token = getToken(account);
+  const token = await getToken(account);
   if (!token) return null;
 
   const sockPath = getSockPath();
-  if (!existsSync(sockPath)) return null;
+  if (!(await socketExists())) return null;
 
   return new Promise((resolve) => {
     const timeout = setTimeout(() => {
       try { socket.destroy(); } catch { /* socket already destroyed or errored */ }
       resolve(null);
-    }, 2000);
+    }, DAEMON_CLIENT_TIMEOUT_MS);
 
     const pending = new Map<string, { resolve: Function }>();
 

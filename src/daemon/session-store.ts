@@ -1,4 +1,5 @@
 import { BaseStore } from "./base-store";
+import { sanitizeFTS5Query } from "../services/input-sanitizer";
 
 export interface Session {
   id: string;
@@ -135,26 +136,8 @@ export class SessionStore extends BaseStore {
     return rows.map(r => this.deserializeRow(r));
   }
 
-  private sanitizeQuery(query: string): string {
-    const terms = query
-      .split(/\s+/)
-      .filter(Boolean)
-      .map(term => {
-        // Strip FTS5 operators and special characters
-        const cleaned = term.replace(/"/g, '""');
-        return cleaned;
-      })
-      .filter(term => {
-        // Guard against degenerate inputs: only-quotes or empty after cleaning
-        const stripped = term.replace(/""/g, '');
-        return stripped.length > 0;
-      })
-      .map(term => `"${term}"`);
-    return terms.join(' ');
-  }
-
   search(query: string, limit: number = 20): { session: Session; rank: number; snippet: string }[] {
-    const sanitized = this.sanitizeQuery(query);
+    const sanitized = sanitizeFTS5Query(query);
     if (!sanitized) return [];
 
     const rows = this.db.query(`

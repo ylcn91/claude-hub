@@ -1,8 +1,6 @@
 #!/usr/bin/env bun
 import React from "react";
-import { render } from "ink";
 import meow from "meow";
-import { App } from "./app.js";
 
 const cli = meow(
   `
@@ -172,9 +170,17 @@ if (command === "daemon" && subcommand === "start") {
     process.exit(1);
   }
   const dir = cli.input[2]; // optional third positional arg
+  const { LaunchDirSchema } = await import("./daemon/schemas.js");
+  const validation = LaunchDirSchema.safeParse({ dir });
+  if (!validation.success) {
+    for (const issue of validation.error.issues) {
+      console.error(`Invalid ${issue.path.join(".")}: ${issue.message}`);
+    }
+    process.exit(1);
+  }
   const { launchCommand } = await import("./services/cli-commands.js");
   try {
-    const result = await launchCommand(name, dir, {
+    const result = await launchCommand(name, validation.data.dir, {
       resume: cli.flags.resume,
       noWindow: cli.flags.noWindow,
       bypassPermissions: cli.flags.bypassPermissions,
@@ -200,8 +206,16 @@ if (command === "daemon" && subcommand === "start") {
     console.error("Usage: actl find <pattern>");
     process.exit(1);
   }
+  const { SearchPatternSchema } = await import("./daemon/schemas.js");
+  const validation = SearchPatternSchema.safeParse({ pattern });
+  if (!validation.success) {
+    for (const issue of validation.error.issues) {
+      console.error(`Invalid ${issue.path.join(".")}: ${issue.message}`);
+    }
+    process.exit(1);
+  }
   const { findCommand } = await import("./services/cli-commands.js");
-  console.log(await findCommand(pattern));
+  console.log(await findCommand(validation.data.pattern));
 } else if (command === "config" && subcommand === "reload") {
   const { connect } = await import("net");
   const { existsSync } = await import("fs");
@@ -267,10 +281,18 @@ if (command === "daemon" && subcommand === "start") {
     console.error("Usage: actl config set <key> <value>");
     process.exit(1);
   }
+  const { ConfigSetArgsSchema } = await import("./daemon/schemas.js");
+  const validation = ConfigSetArgsSchema.safeParse({ key, value: val });
+  if (!validation.success) {
+    for (const issue of validation.error.issues) {
+      console.error(`Invalid ${issue.path.join(".")}: ${issue.message}`);
+    }
+    process.exit(1);
+  }
   const { setConfigValue } = await import("./config.js");
   try {
-    const { oldValue, newValue } = await setConfigValue(key, val);
-    console.log(`${key}: ${JSON.stringify(oldValue)} → ${JSON.stringify(newValue)}`);
+    const { oldValue, newValue } = await setConfigValue(validation.data.key, validation.data.value);
+    console.log(`${validation.data.key}: ${JSON.stringify(oldValue)} → ${JSON.stringify(newValue)}`);
   } catch (e: any) {
     console.error(`Error: ${e.message}`);
     process.exit(1);
@@ -281,9 +303,17 @@ if (command === "daemon" && subcommand === "start") {
     console.error("Usage: actl search <pattern>");
     process.exit(1);
   }
+  const { SearchPatternSchema } = await import("./daemon/schemas.js");
+  const validation = SearchPatternSchema.safeParse({ pattern });
+  if (!validation.success) {
+    for (const issue of validation.error.issues) {
+      console.error(`Invalid ${issue.path.join(".")}: ${issue.message}`);
+    }
+    process.exit(1);
+  }
   const { searchCommand } = await import("./services/cli-commands.js");
   try {
-    console.log(await searchCommand(pattern));
+    console.log(await searchCommand(validation.data.pattern));
   } catch (e: any) {
     console.error(`Error: ${e.message}`);
     process.exit(1);
@@ -316,12 +346,20 @@ if (command === "daemon" && subcommand === "start") {
     console.error("Usage: actl session name <session-id> <name>");
     process.exit(1);
   }
+  const { SessionNameArgsSchema } = await import("./daemon/schemas.js");
+  const validation = SessionNameArgsSchema.safeParse({ sessionId, name });
+  if (!validation.success) {
+    for (const issue of validation.error.issues) {
+      console.error(`Invalid ${issue.path.join(".")}: ${issue.message}`);
+    }
+    process.exit(1);
+  }
   const { SessionStore } = await import("./daemon/session-store.js");
   const { getSessionsDbPath } = await import("./paths.js");
   const store = new SessionStore(getSessionsDbPath());
   try {
-    const session = store.nameSession(sessionId, name, { account: cli.flags.account ?? "local" });
-    console.log(`Session ${sessionId} named: "${session.name}"`);
+    const session = store.nameSession(validation.data.sessionId, validation.data.name, { account: cli.flags.account ?? "local" });
+    console.log(`Session ${validation.data.sessionId} named: "${session.name}"`);
   } finally {
     store.close();
   }
@@ -389,5 +427,7 @@ if (command === "daemon" && subcommand === "start") {
   console.log(showHelp(subcommand));
 } else {
   // Default: TUI mode
+  const { render } = await import("ink");
+  const { App } = await import("./app.js");
   render(<App />);
 }

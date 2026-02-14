@@ -5,10 +5,15 @@
  * When a `validate` function is provided, each parsed JSON object is passed
  * through it before calling onMessage.  If validation returns null the
  * message is silently dropped (the validator is expected to log/warn).
+ *
+ * When an `onError` callback is provided, JSON parse failures are reported
+ * through it instead of only logging to console.warn.  The parser continues
+ * processing subsequent lines regardless of errors.
  */
 export function createLineParser(
   onMessage: (msg: any) => void,
   validate?: (raw: unknown) => any | null,
+  onError?: (error: Error, rawLine: string) => void,
 ): { feed(chunk: Buffer | string): void } {
   let buffer = "";
   return {
@@ -29,7 +34,11 @@ export function createLineParser(
           } else {
             onMessage(json);
           }
-        } catch {
+        } catch (err) {
+          const error = err instanceof Error ? err : new Error(String(err));
+          if (onError) {
+            onError(error, trimmed);
+          }
           console.warn("[framing] invalid JSON line:", trimmed.substring(0, 100));
         }
       }

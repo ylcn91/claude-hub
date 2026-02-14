@@ -1,4 +1,4 @@
-import { test, expect, beforeEach, afterEach } from "bun:test";
+import { test, expect, describe, beforeEach, afterEach } from "bun:test";
 import { WorkflowStore } from "../src/services/workflow-store";
 import { WorkflowEngine } from "../src/services/workflow-engine";
 import type { WorkflowDefinition } from "../src/services/workflow-parser";
@@ -269,4 +269,96 @@ test("events are recorded for workflow lifecycle", async () => {
   expect(types).toContain("step_assigned");
   expect(types).toContain("step_completed");
   expect(types).toContain("workflow_completed");
+});
+
+describe("circular dependency detection", () => {
+  test("rejects direct cycle: A depends on B, B depends on A", async () => {
+    const def: WorkflowDefinition = {
+      name: "direct-cycle",
+      version: 1,
+      steps: [
+        { id: "a", title: "A", assign: "agent-1", depends_on: ["b"], handoff: { goal: "Do A" } },
+        { id: "b", title: "B", assign: "agent-2", depends_on: ["a"], handoff: { goal: "Do B" } },
+      ],
+      on_failure: "notify",
+      retro: false,
+    };
+
+    await expect(engine.triggerWorkflow(def, "test")).rejects.toThrow("cycle");
+  });
+
+  test("rejects indirect cycle: A -> B -> C -> A", async () => {
+    const def: WorkflowDefinition = {
+      name: "indirect-cycle",
+      version: 1,
+      steps: [
+        { id: "a", title: "A", assign: "agent-1", depends_on: ["c"], handoff: { goal: "Do A" } },
+        { id: "b", title: "B", assign: "agent-2", depends_on: ["a"], handoff: { goal: "Do B" } },
+        { id: "c", title: "C", assign: "agent-3", depends_on: ["b"], handoff: { goal: "Do C" } },
+      ],
+      on_failure: "notify",
+      retro: false,
+    };
+
+    await expect(engine.triggerWorkflow(def, "test")).rejects.toThrow("cycle");
+  });
+
+  test("rejects self-referencing step: A depends on A", async () => {
+    const def: WorkflowDefinition = {
+      name: "self-ref",
+      version: 1,
+      steps: [
+        { id: "a", title: "A", assign: "agent-1", depends_on: ["a"], handoff: { goal: "Do A" } },
+      ],
+      on_failure: "notify",
+      retro: false,
+    };
+
+    await expect(engine.triggerWorkflow(def, "test")).rejects.toThrow("cycle");
+  });
+
+  test("rejects dependency on unknown step", async () => {
+    const def: WorkflowDefinition = {
+      name: "unknown-dep",
+      version: 1,
+      steps: [
+        { id: "a", title: "A", assign: "agent-1", depends_on: ["nonexistent"], handoff: { goal: "Do A" } },
+      ],
+      on_failure: "notify",
+      retro: false,
+    };
+
+    await expect(engine.triggerWorkflow(def, "test")).rejects.toThrow("unknown step");
+  });
+
+  test("valid DAG still works after adding cycle detection", async () => {
+    const def: WorkflowDefinition = {
+      name: "valid-dag",
+      version: 1,
+      steps: [
+        { id: "a", title: "A", assign: "agent-1", handoff: { goal: "Do A" } },
+        { id: "b", title: "B", assign: "agent-2", depends_on: ["a"], handoff: { goal: "Do B" } },
+        { id: "c", title: "C", assign: "agent-3", depends_on: ["a"], handoff: { goal: "Do C" } },
+        { id: "d", title: "D", assign: "agent-1", depends_on: ["b", "c"], handoff: { goal: "Do D" } },
+      ],
+      on_failure: "notify",
+      retro: false,
+    };
+
+    const runId = await engine.triggerWorkflow(def, "dag-test");
+    expect(runId).toBeDefined();
+
+    const steps = store.getStepRunsForRun(runId);
+    expect(steps).toHaveLength(4);
+
+    // Only step A should be assigned (no deps)
+    const stepA = steps.find(s => s.step_id === "a");
+    expect(stepA!.status).toBe("assigned");
+
+    // B, C, D should be pending
+    for (const id of ["b", "c", "d"]) {
+      const step = steps.find(s => s.step_id === id);
+      expect(step!.status).toBe("pending");
+    }
+  });
 });

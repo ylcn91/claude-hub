@@ -1,4 +1,4 @@
-import { useState, useEffect, useContext } from "react";
+import { useState, useEffect, useContext, memo } from "react";
 import { Box, Text, useInput } from "ink";
 import { NavContext } from "../app.js";
 import { useTheme } from "../themes/index.js";
@@ -36,7 +36,7 @@ const STATUS_LABELS: Record<TaskStatus, string> = {
   rejected: "Rejected",
 };
 
-export function TaskBoard({ onNavigate, accounts = [] }: Props) {
+export const TaskBoard = memo(function TaskBoard({ onNavigate, accounts = [] }: Props) {
   const { colors } = useTheme();
   const [board, setBoard] = useState<TaskBoardData>({ tasks: [] });
   const [loading, setLoading] = useState(true);
@@ -379,4 +379,4 @@ export function TaskBoard({ onNavigate, accounts = [] }: Props) {
       })()}
     </Box>
   );
-}
+});
