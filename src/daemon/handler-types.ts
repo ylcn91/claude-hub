@@ -7,7 +7,7 @@ export type HandlerFn = (socket: Socket, msg: any) => void;
 export interface HandlerContext {
   state: DaemonState;
   features?: DaemonFeatures;
-  councilConfig?: { members: string[]; chairman: string };
+  councilConfig?: { members: string[]; chairman: string; timeoutMs?: number };
   safeWrite: (socket: Socket, data: string) => void;
   reply: (msg: any, response: object) => string;
   getAccountName: (socket: Socket) => string;

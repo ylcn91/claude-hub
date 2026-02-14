@@ -319,6 +319,104 @@ describe("DaemonMessageSchema", () => {
     expect(result.success).toBe(false);
   });
 
+  test("accepts council_analyze with timeoutMs", () => {
+    const result = DaemonMessageSchema.safeParse({
+      type: "council_analyze",
+      goal: "analyze this",
+      timeoutMs: 60000,
+    });
+    expect(result.success).toBe(true);
+  });
+
+  test("rejects council_analyze with timeoutMs below 1000", () => {
+    const result = DaemonMessageSchema.safeParse({
+      type: "council_analyze",
+      goal: "analyze this",
+      timeoutMs: 500,
+    });
+    expect(result.success).toBe(false);
+  });
+
+  test("accepts valid council_verify", () => {
+    const result = DaemonMessageSchema.safeParse({
+      type: "council_verify",
+      taskId: "t-1",
+      goal: "fix the bug",
+      acceptance_criteria: ["tests pass", "no regressions"],
+    });
+    expect(result.success).toBe(true);
+  });
+
+  test("accepts council_verify with all optional fields", () => {
+    const result = DaemonMessageSchema.safeParse({
+      type: "council_verify",
+      taskId: "t-1",
+      goal: "fix the bug",
+      acceptance_criteria: ["tests pass"],
+      diff: "--- a/file.ts\n+++ b/file.ts",
+      testResults: "5 pass, 0 fail",
+      filesChanged: ["src/file.ts"],
+      riskNotes: ["touches auth layer"],
+      timeoutMs: 60000,
+    });
+    expect(result.success).toBe(true);
+  });
+
+  test("rejects council_verify with empty taskId", () => {
+    const result = DaemonMessageSchema.safeParse({
+      type: "council_verify",
+      taskId: "",
+      goal: "fix the bug",
+      acceptance_criteria: ["tests pass"],
+    });
+    expect(result.success).toBe(false);
+  });
+
+  test("rejects council_verify with empty goal", () => {
+    const result = DaemonMessageSchema.safeParse({
+      type: "council_verify",
+      taskId: "t-1",
+      goal: "",
+      acceptance_criteria: ["tests pass"],
+    });
+    expect(result.success).toBe(false);
+  });
+
+  test("rejects council_verify without acceptance_criteria", () => {
+    const result = DaemonMessageSchema.safeParse({
+      type: "council_verify",
+      taskId: "t-1",
+      goal: "fix the bug",
+    });
+    expect(result.success).toBe(false);
+  });
+
+  test("rejects council_verify with timeoutMs below 1000", () => {
+    const result = DaemonMessageSchema.safeParse({
+      type: "council_verify",
+      taskId: "t-1",
+      goal: "fix",
+      acceptance_criteria: ["pass"],
+      timeoutMs: 100,
+    });
+    expect(result.success).toBe(false);
+  });
+
+  test("accepts council_history", () => {
+    const result = DaemonMessageSchema.safeParse({
+      type: "council_history",
+    });
+    expect(result.success).toBe(true);
+  });
+
+  test("accepts council_history with requestId", () => {
+    const result = DaemonMessageSchema.safeParse({
+      type: "council_history",
+      requestId: "req-99",
+    });
+    expect(result.success).toBe(true);
+  });
+
   // --- Knowledge ---
 
   test("accepts search_knowledge", () => {
@@ -461,6 +559,33 @@ describe("DaemonMessageSchema", () => {
   });
 
   // --- Misc ---
+
+  test("accepts query_activity with no filters", () => {
+    const result = DaemonMessageSchema.safeParse({
+      type: "query_activity",
+    });
+    expect(result.success).toBe(true);
+  });
+
+  test("accepts query_activity with all filters", () => {
+    const result = DaemonMessageSchema.safeParse({
+      type: "query_activity",
+      activityType: "delegation_chain",
+      account: "agent-a",
+      workflowRunId: "wf-123",
+      since: "2026-01-01T00:00:00Z",
+      limit: 25,
+    });
+    expect(result.success).toBe(true);
+  });
+
+  test("rejects query_activity with non-positive limit", () => {
+    const result = DaemonMessageSchema.safeParse({
+      type: "query_activity",
+      limit: 0,
+    });
+    expect(result.success).toBe(false);
+  });
 
   test("accepts search_code", () => {
     const result = DaemonMessageSchema.safeParse({

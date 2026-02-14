@@ -136,8 +136,9 @@ export function createAccountCaller(accounts: AccountConfig[], timeoutMs?: numbe
       env: { ...process.env, ...env },
     });
 
+    let timerId: ReturnType<typeof setTimeout> | undefined;
     const timeoutPromise = new Promise<never>((_, reject) => {
-      setTimeout(() => {
+      timerId = setTimeout(() => {
         proc.kill();
         reject(new LLMTimeoutError(accountName, effectiveTimeout));
       }, effectiveTimeout);
@@ -155,7 +156,11 @@ export function createAccountCaller(accounts: AccountConfig[], timeoutMs?: numbe
       return parseOutput(stdout.trim());
     })();
 
-    return Promise.race([resultPromise, timeoutPromise]);
+    try {
+      return await Promise.race([resultPromise, timeoutPromise]);
+    } finally {
+      clearTimeout(timerId);
+    }
   };
 }
 

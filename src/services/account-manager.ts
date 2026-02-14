@@ -59,8 +59,8 @@ export function validatePurgePath(dirPath: string): void {
     );
   }
 
-  // Only allow paths under the agentctl base directory
-  if (!resolved.startsWith(hubDir + "/") && resolved !== hubDir) {
+  // Only allow paths strictly under the agentctl base directory (not the root itself)
+  if (!resolved.startsWith(hubDir + "/")) {
     throw new Error(
       `Refusing to purge '${resolved}': path is not under the agentctl config directory '${hubDir}'.`
     );

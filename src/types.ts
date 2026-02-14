@@ -45,6 +45,7 @@ export interface GitHubConfig {
 export interface CouncilConfig {
   members: string[];
   chairman: string;
+  timeoutMs?: number;
 }
 
 // Council analysis result types

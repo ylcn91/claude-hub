@@ -56,7 +56,7 @@ export interface DaemonOpts {
   sockPath?: string;
   features?: DaemonFeatures;
   entireGitDir?: string;
-  council?: { members: string[]; chairman: string };
+  council?: { members: string[]; chairman: string; timeoutMs?: number };
 }
 
 export async function startDaemon(opts?: DaemonOpts): Promise<{ server: Server; state: DaemonState; sockPath: string; watchdog?: { stop: () => void }; sessionCleanupTimer?: ReturnType<typeof setInterval>; entireAdapter?: import("../services/entire-adapter").EntireAdapter }> {
@@ -286,12 +286,13 @@ export async function startDaemon(opts?: DaemonOpts): Promise<{ server: Server; 
     }, (raw: unknown) => {
       const parsed = DaemonMessageSchema.safeParse(raw);
       if (!parsed.success) {
-        // If it's valid JSON with a type field, let it through for a proper error response
         if (raw && typeof raw === "object" && "type" in raw) {
-          console.warn(`[framing] invalid message (type=${(raw as any).type}):`, parsed.error.message);
-          return raw;
+          const errorDetail = parsed.error.issues.map(i => `${i.path.join(".")}: ${i.message}`).join("; ");
+          console.warn(`[framing] invalid message (type=${(raw as any).type}):`, errorDetail);
+          safeWrite(socket, reply(raw, { type: "error", error: `Invalid message: ${errorDetail}` }));
+        } else {
+          console.warn("[framing] invalid message (no type):", parsed.error.message);
         }
-        console.warn("[framing] invalid message (no type):", parsed.error.message);
         return null;
       }
       return parsed.data;

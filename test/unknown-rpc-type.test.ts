@@ -1,8 +1,8 @@
 /**
  * Tests that the daemon handles unknown/invalid message types gracefully.
  *
- * The daemon dispatches authenticated messages via a handler map (buildHandlerMap).
- * When a message type has no matching handler, the daemon currently silently drops it.
+ * Messages are validated against DaemonMessageSchema before reaching handlers.
+ * Unknown or malformed types are rejected at the schema level with an error response.
  * These tests verify that behavior and ensure unknown types never crash the daemon.
  */
 import { describe, test, expect, afterEach } from "bun:test";
@@ -44,7 +44,7 @@ describe("unknown RPC message type", () => {
       // Send an unknown message type — the daemon should return an error
       const errorResult = await sendAndWait(socket, { type: "nonexistent_command" });
       expect(errorResult.type).toBe("error");
-      expect(errorResult.error).toContain("Unknown message type");
+      expect(errorResult.error).toContain("Invalid message");
 
       // The connection should still be alive — verify by sending a known message
       const pingResult = await sendAndWait(socket, { type: "send_message", to: ACCOUNT, content: "ping after unknown" });

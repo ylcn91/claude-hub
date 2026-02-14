@@ -19,11 +19,11 @@ const VERDICT_LABELS: Record<VerificationVerdict, string> = {
 // VERDICT_COLORS and confidenceColor moved inside components to use theme
 
 function getVerificationCachePath(): string {
-  return `${getHubDir()}/verification-results.json`;
+  return `${getHubDir()}/council-verifications.json`;
 }
 
 interface VerificationCache {
-  results: VerificationResult[];
+  verifications: VerificationResult[];
 }
 
 export const VerificationView = memo(function VerificationView({ onNavigate }: Props) {
@@ -55,8 +55,8 @@ export const VerificationView = memo(function VerificationView({ onNavigate }: P
     async function load() {
       try {
         const cache = await atomicRead<VerificationCache>(getVerificationCachePath());
-        if (cache && Array.isArray(cache.results)) {
-          setResults(cache.results);
+        if (cache && Array.isArray(cache.verifications)) {
+          setResults(cache.verifications);
         }
       } catch (e: any) {
         console.error("[verification-view]", e.message);

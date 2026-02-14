@@ -400,4 +400,11 @@ describe("validatePurgePath", () => {
     mkdirSync(validPath, { recursive: true });
     expect(() => validatePurgePath(validPath)).not.toThrow();
   });
+
+  test("rejects the hub root directory itself", () => {
+    const hubDir = process.env.AGENTCTL_DIR ?? `${process.env.HOME}/.agentctl`;
+    expect(() => validatePurgePath(hubDir)).toThrow(
+      "not under the agentctl config directory"
+    );
+  });
 });

@@ -164,6 +164,25 @@ const CouncilAnalyzeMessage = z.object({
   type: z.literal("council_analyze"),
   goal: z.string().min(1),
   context: z.unknown().optional(),
+  timeoutMs: z.number().int().min(1000).optional(),
+  requestId,
+});
+
+const CouncilVerifyMessage = z.object({
+  type: z.literal("council_verify"),
+  taskId: z.string().min(1),
+  goal: z.string().min(1),
+  acceptance_criteria: z.array(z.string()),
+  diff: z.string().optional(),
+  testResults: z.string().optional(),
+  filesChanged: z.array(z.string()).optional(),
+  riskNotes: z.array(z.string()).optional(),
+  timeoutMs: z.number().int().min(1000).optional(),
+  requestId,
+});
+
+const CouncilHistoryMessage = z.object({
+  type: z.literal("council_history"),
   requestId,
 });
 
@@ -298,6 +317,16 @@ const HealthStatusMessage = z.object({
 
 // --- Misc handlers ---
 
+const QueryActivityMessage = z.object({
+  type: z.literal("query_activity"),
+  activityType: z.string().optional(),
+  account: z.string().optional(),
+  workflowRunId: z.string().optional(),
+  since: z.string().optional(),
+  limit: z.number().int().positive().optional(),
+  requestId,
+});
+
 const SearchCodeMessage = z.object({
   type: z.literal("search_code"),
   pattern: z.string().min(1),
@@ -419,6 +448,8 @@ export const DaemonMessageSchema = z.discriminatedUnion("type", [
   CleanupWorkspaceMessage,
   // Council
   CouncilAnalyzeMessage,
+  CouncilVerifyMessage,
+  CouncilHistoryMessage,
   // Knowledge
   SearchKnowledgeMessage,
   IndexNoteMessage,
@@ -442,6 +473,7 @@ export const DaemonMessageSchema = z.discriminatedUnion("type", [
   HealthCheckMessage,
   HealthStatusMessage,
   // Misc
+  QueryActivityMessage,
   SearchCodeMessage,
   ReplaySessionMessage,
   LinkTaskMessage,
