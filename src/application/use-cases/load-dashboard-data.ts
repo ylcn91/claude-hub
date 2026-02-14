@@ -1,7 +1,7 @@
 import { loadConfig } from "../../config.js";
 import { registry } from "../../providers/index.js";
 import { getEntireCheckpoints } from "../../services/entire.js";
-import { fetchUnreadCounts } from "../../services/daemon-client.js";
+import { fetchUnreadCounts, fetchPairedSessions } from "../../services/daemon-client.js";
 import { notifyRateLimit } from "../../services/notifications.js";
 import { assertHomeDir } from "../../paths.js";
 import type { AccountConfig } from "../../types.js";
@@ -17,6 +17,7 @@ export interface DashboardData {
   accounts: DashboardAccountData[];
   entireStatuses: Map<string, string>;
   unreadCounts: Map<string, number>;
+  pairedSessions: Map<string, string>;
 }
 
 function formatTimeSince(dateStr: string): string {
@@ -86,5 +87,11 @@ export async function loadDashboardData(configPath?: string): Promise<DashboardD
     unreadCounts = await fetchUnreadCounts(config.accounts.map((a) => a.name));
   } catch(e: any) { console.error("[dash]", e.message) }
 
-  return { accounts, entireStatuses, unreadCounts };
+  // Paired sessions
+  let pairedSessions = new Map<string, string>();
+  try {
+    pairedSessions = await fetchPairedSessions(config.accounts.map((a) => a.name));
+  } catch(e: any) { console.error("[dash]", e.message) }
+
+  return { accounts, entireStatuses, unreadCounts, pairedSessions };
 }

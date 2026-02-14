@@ -17,6 +17,7 @@ export function Dashboard({ onNavigate }: Props) {
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [entireStatuses, setEntireStatuses] = useState<Map<string, string>>(new Map());
   const [unreadCounts, setUnreadCounts] = useState<Map<string, number>>(new Map());
+  const [pairedSessions, setPairedSessions] = useState<Map<string, string>>(new Map());
   const [refreshTick, setRefreshTick] = useState(0);
 
   // Auto-refresh polling
@@ -34,6 +35,7 @@ export function Dashboard({ onNavigate }: Props) {
         setAccounts(data.accounts);
         setEntireStatuses(data.entireStatuses);
         setUnreadCounts(data.unreadCounts);
+        setPairedSessions(data.pairedSessions);
       } catch (e: any) {
         setError(e.message);
       } finally {
@@ -106,6 +108,7 @@ export function Dashboard({ onNavigate }: Props) {
           quota={a.quota}
           entireStatus={entireStatuses.get(a.account.name)}
           unreadMessages={unreadCounts.get(a.account.name) ?? 0}
+          pairedWith={pairedSessions.get(a.account.name)}
         />
       ))}
       {belowCount > 0 && (

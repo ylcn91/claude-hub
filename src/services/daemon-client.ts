@@ -149,3 +149,76 @@ export async function fetchUnreadCounts(accounts: string[]): Promise<Map<string,
   }
   return counts;
 }
+
+export async function fetchActiveSession(account: string): Promise<{ initiator: string; participant: string } | null> {
+  const token = getToken(account);
+  if (!token) return null;
+
+  const sockPath = getSockPath();
+  if (!existsSync(sockPath)) return null;
+
+  return new Promise((resolve) => {
+    const timeout = setTimeout(() => {
+      try { socket.destroy(); } catch {}
+      resolve(null);
+    }, 2000);
+
+    const pending = new Map<string, { resolve: Function }>();
+
+    const socket = connect(sockPath, () => {
+      const authId = generateRequestId();
+      pending.set(authId, {
+        resolve: (msg: any) => {
+          if (msg.type === "auth_ok") {
+            const statusId = generateRequestId();
+            pending.set(statusId, {
+              resolve: (statusMsg: any) => {
+                clearTimeout(timeout);
+                socket.end();
+                resolve(statusMsg.session ?? null);
+              },
+            });
+            socket.write(frameSend({ type: "session_status", requestId: statusId }));
+          } else {
+            clearTimeout(timeout);
+            socket.end();
+            resolve(null);
+          }
+        },
+      });
+      socket.write(frameSend({ type: "auth", account, token, requestId: authId }));
+    });
+
+    const parser = createLineParser((msg) => {
+      if (msg.requestId && pending.has(msg.requestId)) {
+        const entry = pending.get(msg.requestId)!;
+        pending.delete(msg.requestId);
+        entry.resolve(msg);
+      }
+    });
+
+    socket.on("data", (data) => parser.feed(data));
+
+    socket.on("error", () => {
+      clearTimeout(timeout);
+      resolve(null);
+    });
+  });
+}
+
+export async function fetchPairedSessions(accounts: string[]): Promise<Map<string, string>> {
+  const paired = new Map<string, string>();
+  const results = await Promise.all(
+    accounts.map(async (name) => {
+      const session = await fetchActiveSession(name);
+      return { name, session };
+    })
+  );
+  for (const { name, session } of results) {
+    if (session) {
+      const partner = session.initiator === name ? session.participant : session.initiator;
+      paired.set(name, partner);
+    }
+  }
+  return paired;
+}

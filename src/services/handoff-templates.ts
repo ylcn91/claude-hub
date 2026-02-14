@@ -55,6 +55,40 @@ const BUILT_IN_TEMPLATES: HandoffTemplate[] = [
     createdAt: "2026-01-01T00:00:00.000Z",
     updatedAt: "2026-01-01T00:00:00.000Z",
   },
+  {
+    id: "builtin-code-review",
+    name: "code-review",
+    description: "Code review template with PR link, focus areas, and review checklist",
+    payload: {
+      acceptance_criteria: [
+        "PR link is provided and accessible",
+        "All focus areas have been reviewed",
+        "Review checklist items are addressed",
+        "Feedback is actionable and specific",
+      ],
+      run_commands: ["bun test"],
+      blocked_by: ["none"],
+    },
+    createdAt: "2026-01-01T00:00:00.000Z",
+    updatedAt: "2026-01-01T00:00:00.000Z",
+  },
+  {
+    id: "builtin-investigation",
+    name: "investigation",
+    description: "Investigation template for debugging with symptoms, hypothesis, and what was tried",
+    payload: {
+      acceptance_criteria: [
+        "Symptoms are clearly documented",
+        "At least one hypothesis is stated",
+        "Previous investigation steps are listed",
+        "Root cause is identified or narrowed down",
+      ],
+      run_commands: ["bun test"],
+      blocked_by: ["none"],
+    },
+    createdAt: "2026-01-01T00:00:00.000Z",
+    updatedAt: "2026-01-01T00:00:00.000Z",
+  },
 ];
 
 async function loadStore(): Promise<TemplateStore> {

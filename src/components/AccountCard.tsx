@@ -10,6 +10,7 @@ interface Props {
   quota: QuotaEstimate;
   entireStatus?: string;
   unreadMessages: number;
+  pairedWith?: string;
 }
 
 export function AccountCard({
@@ -18,6 +19,7 @@ export function AccountCard({
   quota,
   entireStatus,
   unreadMessages,
+  pairedWith,
 }: Props) {
   return (
     <Box flexDirection="column" marginBottom={1}>
@@ -26,6 +28,11 @@ export function AccountCard({
           {account.name}
         </Text>
         <Text color="gray"> ({account.label})</Text>
+        {pairedWith && (
+          <Text color="magenta" bold>
+            {"  "}PAIRED with {pairedWith}
+          </Text>
+        )}
         {stats.todayActivity && (
           <Text>
             {"  "}Today: {stats.todayActivity.messageCount} msgs |{" "}

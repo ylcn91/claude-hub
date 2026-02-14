@@ -30,7 +30,7 @@ const EMPTY_STATS: AgentStats = {
 export class GeminiCliProvider implements AgentProvider {
   id = "gemini-cli";
   displayName = "Gemini CLI";
-  icon = "🔵";
+  icon = "♊";
   supportsEntire = false;
 
   async detectRunning(_account: Account): Promise<ProcessInfo | null> {

@@ -298,6 +298,22 @@ export function registerTools(server: McpServer, sendToDaemon: DaemonSender, acc
     return { content: [{ type: "text" as const, text: JSON.stringify(template) }] };
   });
 
+  server.registerTool("list_handoff_types", {
+    description: "List all available handoff template types with their descriptions, default criteria, commands, and blockers",
+  }, async () => {
+    const { loadTemplates } = await import("../services/handoff-templates.js");
+    const templates = await loadTemplates();
+    const types = templates.map((t) => ({
+      id: t.id,
+      name: t.name,
+      description: t.description,
+      acceptance_criteria: t.payload.acceptance_criteria ?? [],
+      run_commands: t.payload.run_commands ?? [],
+      blocked_by: t.payload.blocked_by ?? ["none"],
+    }));
+    return { content: [{ type: "text" as const, text: JSON.stringify(types) }] };
+  });
+
   // ── Prompt Library Tools ──
 
   server.registerTool("save_prompt", {
@@ -611,6 +627,178 @@ export function registerTools(server: McpServer, sendToDaemon: DaemonSender, acc
     description: "Get daemon health status: uptime, connections, memory usage, store status",
   }, async () => {
     const result = await sendToDaemon({ type: "health_check" });
+    return { content: [{ type: "text" as const, text: JSON.stringify(result) }] };
+  });
+
+  // ── Cross-Account Code Search Tool ──
+
+  server.registerTool("search_across_accounts", {
+    description: "Search for a pattern across all account working directories using ripgrep. Results are grouped by account.",
+    inputSchema: {
+      pattern: z.string().describe("Search pattern (regex supported)"),
+      accounts: z.array(z.string()).optional().describe("Limit search to specific accounts"),
+      maxResults: z.number().optional().describe("Maximum results to return (default 100)"),
+    },
+  }, async (args) => {
+    const result = await sendToDaemon({
+      type: "search_code",
+      pattern: args.pattern,
+      targets: args.accounts,
+      maxResults: args.maxResults,
+    });
+    return { content: [{ type: "text" as const, text: JSON.stringify(result) }] };
+  });
+
+  // ── Account Health Tool ──
+
+  server.registerTool("check_account_health", {
+    description: "Check health status of all accounts or a specific account. Shows connection status, last activity, error counts, and rate limit status.",
+    inputSchema: {
+      account: z.string().optional().describe("Specific account to check (omit for all)"),
+    },
+  }, async (args) => {
+    const result = await sendToDaemon({ type: "health_status", account: args.account });
+    if (args.account && result.accounts) {
+      const filtered = result.accounts.filter((a: any) => a.name === args.account);
+      return { content: [{ type: "text" as const, text: JSON.stringify(filtered) }] };
+    }
+    return { content: [{ type: "text" as const, text: JSON.stringify(result) }] };
+  });
+
+  // ── Live Session Sharing Tools ──
+
+  server.registerTool("share_session", {
+    description: "Start a live pair-programming session with another account. The target account must join using join_session.",
+    inputSchema: {
+      target: z.string().describe("Target account to pair with"),
+      workspace: z.string().optional().describe("Workspace or project path"),
+    },
+  }, async (args) => {
+    const result = await sendToDaemon({
+      type: "share_session",
+      target: args.target,
+      workspace: args.workspace,
+    });
+    return { content: [{ type: "text" as const, text: JSON.stringify(result) }] };
+  });
+
+  server.registerTool("join_session", {
+    description: "Accept an invitation and join a live pair-programming session",
+    inputSchema: {
+      sessionId: z.string().describe("Session ID to join"),
+    },
+  }, async (args) => {
+    const result = await sendToDaemon({
+      type: "join_session",
+      sessionId: args.sessionId,
+    });
+    return { content: [{ type: "text" as const, text: JSON.stringify(result) }] };
+  });
+
+  server.registerTool("session_broadcast", {
+    description: "Send an update to the other participant in a live session (file changes, messages, context)",
+    inputSchema: {
+      sessionId: z.string().describe("Session ID"),
+      data: z.record(z.string(), z.unknown()).describe("Update data to broadcast"),
+    },
+  }, async (args) => {
+    const result = await sendToDaemon({
+      type: "session_broadcast",
+      sessionId: args.sessionId,
+      data: args.data,
+    });
+    return { content: [{ type: "text" as const, text: JSON.stringify(result) }] };
+  });
+
+  server.registerTool("session_status", {
+    description: "Check the status of a live session. If no sessionId is provided, returns the active session for the current account.",
+    inputSchema: {
+      sessionId: z.string().optional().describe("Session ID (optional, defaults to active session)"),
+    },
+  }, async (args) => {
+    const result = await sendToDaemon({
+      type: "session_status",
+      sessionId: args.sessionId,
+    });
+    return { content: [{ type: "text" as const, text: JSON.stringify(result) }] };
+  });
+
+  server.registerTool("session_history", {
+    description: "Get recent unread updates from a live session",
+    inputSchema: {
+      sessionId: z.string().describe("Session ID"),
+    },
+  }, async (args) => {
+    const result = await sendToDaemon({
+      type: "session_history",
+      sessionId: args.sessionId,
+    });
+    return { content: [{ type: "text" as const, text: JSON.stringify(result) }] };
+  });
+
+  server.registerTool("leave_session", {
+    description: "End participation in a live pair-programming session",
+    inputSchema: {
+      sessionId: z.string().describe("Session ID to leave"),
+    },
+  }, async (args) => {
+    const result = await sendToDaemon({
+      type: "leave_session",
+      sessionId: args.sessionId,
+    });
+    return { content: [{ type: "text" as const, text: JSON.stringify(result) }] };
+  });
+
+  // ── Session Naming Tools ──
+
+  server.registerTool("name_session", {
+    description: "Name or rename a session for easy identification and future search",
+    inputSchema: {
+      sessionId: z.string().describe("Session ID to name"),
+      name: z.string().describe("Human-readable name for the session"),
+      tags: z.array(z.string()).optional().describe("Tags for categorization"),
+      notes: z.string().optional().describe("Optional notes about the session"),
+    },
+  }, async (args) => {
+    const result = await sendToDaemon({
+      type: "name_session",
+      sessionId: args.sessionId,
+      name: args.name,
+      tags: args.tags,
+      notes: args.notes,
+    });
+    return { content: [{ type: "text" as const, text: JSON.stringify(result) }] };
+  });
+
+  server.registerTool("list_named_sessions", {
+    description: "List named sessions, optionally filtered by account",
+    inputSchema: {
+      account: z.string().optional().describe("Filter by account name"),
+      limit: z.number().optional().describe("Max results (default 50)"),
+      offset: z.number().optional().describe("Offset for pagination"),
+    },
+  }, async (args) => {
+    const result = await sendToDaemon({
+      type: "list_sessions",
+      account: args.account,
+      limit: args.limit,
+      offset: args.offset,
+    });
+    return { content: [{ type: "text" as const, text: JSON.stringify(result) }] };
+  });
+
+  server.registerTool("search_sessions", {
+    description: "Full-text search across named sessions by name, tags, notes, or account",
+    inputSchema: {
+      query: z.string().describe("Search query"),
+      limit: z.number().optional().describe("Max results (default 20)"),
+    },
+  }, async (args) => {
+    const result = await sendToDaemon({
+      type: "search_sessions",
+      query: args.query,
+      limit: args.limit,
+    });
     return { content: [{ type: "text" as const, text: JSON.stringify(result) }] };
   });
 }

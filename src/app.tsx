@@ -13,6 +13,7 @@ import { PromptLibrary } from "./components/PromptLibrary.js";
 import Analytics from "./components/Analytics.js";
 import { WorkflowBoard } from "./components/WorkflowBoard.js";
 import { WorkflowDetail } from "./components/WorkflowDetail.js";
+import { HealthDashboard } from "./components/HealthDashboard.js";
 
 const NAV_KEYS: Record<string, string> = {
   d: "dashboard",
@@ -25,6 +26,7 @@ const NAV_KEYS: Record<string, string> = {
   r: "prompts",
   n: "analytics",
   w: "workflows",
+  h: "health",
 };
 
 export function App() {
@@ -60,6 +62,7 @@ export function App() {
       {view === "analytics" && <Analytics onNavigate={setView} />}
       {view === "workflows" && <WorkflowBoard onNavigate={(v, detail) => { setViewDetail(detail); setView(v); }} />}
       {view === "workflow_detail" && viewDetail?.runId && <WorkflowDetail runId={viewDetail.runId} onNavigate={setView} />}
+      {view === "health" && <HealthDashboard onNavigate={setView} />}
     </Box>
   );
 }

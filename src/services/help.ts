@@ -99,12 +99,68 @@ const COMMANDS: Record<string, CommandHelp> = {
     description: "List all configured accounts with their colors, labels, and config directories.",
     examples: ["ch list"],
   },
+  find: {
+    usage: "ch find <pattern>",
+    description: "Search accounts by name, label, color, or provider.",
+    examples: [
+      "ch find work",
+      "ch find claude-code",
+      'ch find "#f38ba8"',
+    ],
+  },
+  search: {
+    usage: "ch search <pattern>",
+    description: "Search for a pattern across all account working directories using ripgrep.",
+    examples: [
+      "ch search TODO",
+      "ch search 'function\\s+main'",
+    ],
+  },
+  health: {
+    usage: "ch health [account]",
+    description: "Show health status of all accounts or a specific account.",
+    examples: [
+      "ch health",
+      "ch health work",
+    ],
+  },
+  replay: {
+    usage: "ch replay <session-id> [--json]",
+    description:
+      "Replay an entire.io checkpoint session. Shows a timeline of prompts, responses, and tool calls from the checkpoint transcript.",
+    options: ["--json  Output raw JSON instead of formatted timeline"],
+    examples: [
+      "ch replay a3b2c4d5e6f7",
+      "ch replay a3b2c4d5e6f7 --json",
+    ],
+  },
+  "session name": {
+    usage: "ch session name <session-id> <name>",
+    description: "Assign a human-readable name to a session for easier lookup and search.",
+    examples: [
+      'ch session name abc123 "Deploy Pipeline Fix"',
+      'ch session name def456 "Login Bug Investigation"',
+    ],
+  },
+  sessions: {
+    usage: "ch sessions [--search QUERY]",
+    description: "List all named sessions, or search sessions by name, tags, or notes.",
+    options: [
+      "--search  Search sessions by keyword across names, tags, and notes",
+    ],
+    examples: [
+      "ch sessions",
+      'ch sessions --search "deploy"',
+      'ch sessions --search kubernetes',
+    ],
+  },
   config: {
-    usage: "ch config set <key> <value>",
-    description: "Update hub configuration values.",
+    usage: "ch config <set|reload> [args]",
+    description: "Update hub configuration values or reload configuration in the running daemon.",
     examples: [
       'ch config set notifications.enabled true',
       'ch config set notifications.events.rateLimit false',
+      'ch config reload  # reload config in the running daemon',
     ],
   },
   "rotate-token": {
@@ -137,10 +193,21 @@ function overview(): string {
       header: "Account Management",
       cmds: [
         ["ch list", "List all accounts"],
+        ["ch find <pattern>", "Search accounts"],
         ["ch status", "Show account status & quota"],
         ["ch usage", "Detailed usage table"],
         ["ch remove <name>", "Remove an account"],
         ["ch rotate-token <name>", "Rotate account token"],
+      ],
+    },
+    {
+      header: "Search & Monitoring",
+      cmds: [
+        ["ch search <pattern>", "Search code across accounts"],
+        ["ch health [account]", "Account health dashboard"],
+        ["ch replay <session-id>", "Replay entire.io checkpoint"],
+        ["ch sessions [--search Q]", "List or search named sessions"],
+        ["ch session name <id> <name>", "Name a session"],
       ],
     },
     {
@@ -154,6 +221,7 @@ function overview(): string {
       header: "Configuration",
       cmds: [
         ["ch config set <key> <val>", "Update config value"],
+        ["ch config reload", "Reload config in running daemon"],
         ["ch help [command]", "Show help"],
       ],
     },
@@ -171,7 +239,7 @@ function overview(): string {
 
   const tui = chalk.gray(
     "\n  Run " + chalk.white("ch") + " with no arguments to open the interactive TUI.\n" +
-    "  TUI views: [d]ashboard [l]auncher [u]sage [a]dd [t]asks [m]ail [e]scalation [r]prompts [n]analytics  [Esc] back  [q] quit"
+    "  TUI views: [d]ashboard [l]auncher [u]sage [a]dd [t]asks [m]ail [e]scalation [r]prompts [n]analytics [h]ealth  [Esc] back  [q] quit"
   );
 
   return `\n${mascot}\n\n${title}\n${body}\n${tui}\n`;

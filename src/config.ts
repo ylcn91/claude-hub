@@ -48,6 +48,7 @@ const HubConfigSchema = z.object({
     reliability: z.boolean().optional(),
     workflow: z.boolean().optional(),
     retro: z.boolean().optional(),
+    sessions: z.boolean().optional(),
   }).optional(),
   github: z.object({
     enabled: z.boolean(),

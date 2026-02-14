@@ -417,7 +417,15 @@ describe("bridge connect + message send/receive through daemon", () => {
     // Verify in state
     const handoffs = state.getHandoffs("bob");
     expect(handoffs).toHaveLength(1);
-    expect(handoffs[0].content).toBe(JSON.stringify(handoffPayload));
+    const parsedContent = JSON.parse(handoffs[0].content);
+    expect(parsedContent.goal).toBe(handoffPayload.goal);
+    expect(parsedContent.acceptance_criteria).toEqual(handoffPayload.acceptance_criteria);
+    expect(parsedContent.run_commands).toEqual(handoffPayload.run_commands);
+    expect(parsedContent.blocked_by).toEqual(handoffPayload.blocked_by);
+    // Auto-context is attached when projectDir is present
+    if (parsedContent.autoContext) {
+      expect(parsedContent.autoContext.git).toBeDefined();
+    }
     expect(handoffs[0].type).toBe("handoff");
 
     alice.destroy();

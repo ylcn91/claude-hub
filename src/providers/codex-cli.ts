@@ -30,7 +30,7 @@ const EMPTY_STATS: AgentStats = {
 export class CodexCliProvider implements AgentProvider {
   id = "codex-cli";
   displayName = "Codex CLI";
-  icon = "🟢";
+  icon = "🧬";
   supportsEntire = false;
 
   async detectRunning(_account: Account): Promise<ProcessInfo | null> {

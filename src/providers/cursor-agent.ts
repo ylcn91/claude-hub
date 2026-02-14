@@ -30,7 +30,7 @@ const EMPTY_STATS: AgentStats = {
 export class CursorAgentProvider implements AgentProvider {
   id = "cursor-agent";
   displayName = "Cursor Agent";
-  icon = "▶";
+  icon = "🎯";
   supportsEntire = false;
 
   async detectRunning(account: Account): Promise<ProcessInfo | null> {

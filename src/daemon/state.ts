@@ -7,9 +7,12 @@ import { ExternalLinkStore } from "../services/external-links";
 import { ActivityStore } from "../services/activity-store";
 import { WorkflowStore } from "../services/workflow-store";
 import { WorkflowEngine } from "../services/workflow-engine";
-import { getKnowledgeDbPath, getActivityDbPath, getWorkflowDbPath, getRetroDbPath } from "../paths";
+import { getKnowledgeDbPath, getActivityDbPath, getWorkflowDbPath, getRetroDbPath, getSessionsDbPath } from "../paths";
+import { SessionStore } from "./session-store";
 import { RetroStore } from "../services/retro-store";
 import { RetroEngine } from "../services/retro-engine";
+import { SharedSessionManager } from "./shared-session";
+import { HealthMonitor } from "./health-monitor";
 
 export interface Message {
   id?: string;
@@ -35,6 +38,9 @@ export class DaemonState {
   workflowEngine?: WorkflowEngine;
   retroStore?: RetroStore;
   retroEngine?: RetroEngine;
+  sessionStore?: SessionStore;
+  sharedSessionManager = new SharedSessionManager();
+  healthMonitor = new HealthMonitor();
   startedAt: string = new Date().toISOString();
   slaTimerId?: ReturnType<typeof setInterval>;
   onMessagePersist?: (msg: Message) => Promise<void>;
@@ -78,6 +84,11 @@ export class DaemonState {
     this.workflowEngine = new WorkflowEngine(this.workflowStore, this.activityStore, this);
   }
 
+  initSessions(dbPath?: string): void {
+    const path = dbPath ?? getSessionsDbPath();
+    this.sessionStore = new SessionStore(path);
+  }
+
   initRetro(dbPath?: string): void {
     const path = dbPath ?? getRetroDbPath();
     this.retroStore = new RetroStore(path);
@@ -90,10 +101,12 @@ export class DaemonState {
 
   connectAccount(name: string, token: string): void {
     this.connectedAccounts.set(name, { token, connectedAt: new Date().toISOString() });
+    this.healthMonitor.markActive(name);
   }
 
   disconnectAccount(name: string): void {
     this.connectedAccounts.delete(name);
+    this.healthMonitor.markDisconnected(name);
   }
 
   getConnectedAccounts(): string[] {
@@ -159,6 +172,7 @@ export class DaemonState {
       this.activityStore,
       this.workflowStore,
       this.retroStore,
+      this.sessionStore,
       this.store,
     ];
     for (const s of stores) {

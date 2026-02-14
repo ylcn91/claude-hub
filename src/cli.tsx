@@ -20,6 +20,7 @@ const cli = meow(
     $ ch status             Show account status
     $ ch usage              Show usage table
     $ ch list               List accounts
+    $ ch replay <session-id> Replay entire.io checkpoint
 
   Options
     --account  Account name (for bridge mode)
@@ -48,6 +49,8 @@ const cli = meow(
       bypassPermissions: { type: "boolean", default: false },
       noEntire: { type: "boolean", default: false },
       provider: { type: "string" },
+      json: { type: "boolean", default: false },
+      search: { type: "string" },
     },
   }
 );
@@ -183,6 +186,72 @@ if (command === "daemon" && subcommand === "start") {
 } else if (command === "list") {
   const { listCommand } = await import("./services/cli-commands.js");
   console.log(await listCommand());
+} else if (command === "find") {
+  const pattern = subcommand;
+  if (!pattern) {
+    console.error("Usage: ch find <pattern>");
+    process.exit(1);
+  }
+  const { findCommand } = await import("./services/cli-commands.js");
+  console.log(await findCommand(pattern));
+} else if (command === "config" && subcommand === "reload") {
+  const { connect } = await import("net");
+  const { existsSync } = await import("fs");
+  const { getSockPath } = await import("./paths.js");
+  const { createLineParser, generateRequestId, frameSend } = await import("./daemon/framing.js");
+  const sockPath = getSockPath();
+  if (!existsSync(sockPath)) {
+    console.error("Daemon not running (no socket). Start with: ch daemon start");
+    process.exit(1);
+  }
+  try {
+    const result = await new Promise<{ reloaded: boolean; accounts: number }>((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        try { socket.destroy(); } catch {}
+        reject(new Error("Daemon did not respond within 2s"));
+      }, 2000);
+
+      const pending = new Map<string, { resolve: Function }>();
+
+      const socket = connect(sockPath, () => {
+        // config_reload uses ping (unauthenticated) pattern — but the daemon
+        // requires auth for config_reload.  Use a simple ping-based approach:
+        // Send a ping first, then config_reload after pong.
+        const reloadId = generateRequestId();
+        pending.set(reloadId, {
+          resolve: (msg: any) => {
+            clearTimeout(timeout);
+            socket.end();
+            if (msg.type === "error") {
+              reject(new Error(msg.error));
+            } else {
+              resolve({ reloaded: msg.reloaded ?? true, accounts: msg.accounts ?? 0 });
+            }
+          },
+        });
+        socket.write(frameSend({ type: "config_reload", requestId: reloadId }));
+      });
+
+      const parser = createLineParser((msg: any) => {
+        if (msg.requestId && pending.has(msg.requestId)) {
+          const entry = pending.get(msg.requestId)!;
+          pending.delete(msg.requestId);
+          entry.resolve(msg);
+        }
+      });
+
+      socket.on("data", (data: Buffer) => parser.feed(data));
+      socket.on("error", (err: Error) => {
+        clearTimeout(timeout);
+        reject(err);
+      });
+    });
+    console.log(`Config reloaded via daemon (${result.accounts} accounts)`);
+  } catch (e: unknown) {
+    const message = e instanceof Error ? e.message : String(e);
+    console.error(`Error: ${message}`);
+    process.exit(1);
+  }
 } else if (command === "config" && subcommand === "set") {
   const key = cli.input[2];
   const val = cli.input[3];
@@ -197,6 +266,83 @@ if (command === "daemon" && subcommand === "start") {
   } catch (e: any) {
     console.error(`Error: ${e.message}`);
     process.exit(1);
+  }
+} else if (command === "search") {
+  const pattern = subcommand;
+  if (!pattern) {
+    console.error("Usage: ch search <pattern>");
+    process.exit(1);
+  }
+  const { searchCommand } = await import("./services/cli-commands.js");
+  try {
+    console.log(await searchCommand(pattern));
+  } catch (e: any) {
+    console.error(`Error: ${e.message}`);
+    process.exit(1);
+  }
+} else if (command === "health") {
+  const { healthCommand } = await import("./services/cli-commands.js");
+  try {
+    console.log(await healthCommand(subcommand));
+  } catch (e: any) {
+    console.error(`Error: ${e.message}`);
+    process.exit(1);
+  }
+} else if (command === "replay") {
+  const sessionId = subcommand;
+  if (!sessionId) {
+    console.error("Usage: ch replay <session-id> [--json]");
+    process.exit(1);
+  }
+  const { replayCommand } = await import("./services/cli-commands.js");
+  try {
+    console.log(await replayCommand(sessionId, { json: cli.flags.json }));
+  } catch (e: any) {
+    console.error(`Error: ${e.message}`);
+    process.exit(1);
+  }
+} else if (command === "session" && subcommand === "name") {
+  const sessionId = cli.input[2];
+  const name = cli.input[3];
+  if (!sessionId || !name) {
+    console.error("Usage: ch session name <session-id> <name>");
+    process.exit(1);
+  }
+  const { SessionStore } = await import("./daemon/session-store.js");
+  const { getSessionsDbPath } = await import("./paths.js");
+  const store = new SessionStore(getSessionsDbPath());
+  try {
+    const session = store.nameSession(sessionId, name, { account: cli.flags.account ?? "local" });
+    console.log(`Session ${sessionId} named: "${session.name}"`);
+  } finally {
+    store.close();
+  }
+} else if (command === "sessions") {
+  const { SessionStore } = await import("./daemon/session-store.js");
+  const { getSessionsDbPath } = await import("./paths.js");
+  const store = new SessionStore(getSessionsDbPath());
+  try {
+    if (cli.flags.search) {
+      const results = store.search(cli.flags.search);
+      if (results.length === 0) {
+        console.log(`No sessions matching "${cli.flags.search}"`);
+      } else {
+        for (const r of results) {
+          console.log(`${r.session.id}  ${r.session.name}  (${r.session.account})  ${r.session.startedAt}`);
+        }
+      }
+    } else {
+      const sessions = store.list();
+      if (sessions.length === 0) {
+        console.log("No named sessions. Use: ch session name <id> <name>");
+      } else {
+        for (const s of sessions) {
+          console.log(`${s.id}  ${s.name}  (${s.account})  ${s.startedAt}`);
+        }
+      }
+    }
+  } finally {
+    store.close();
   }
 } else if (command === "help") {
   const { showHelp } = await import("./services/help.js");

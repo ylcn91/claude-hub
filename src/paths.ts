@@ -79,3 +79,7 @@ export function getWorkflowDbPath(): string {
 export function getRetroDbPath(): string {
   return `${getHubDir()}/retro.db`;
 }
+
+export function getSessionsDbPath(): string {
+  return `${getHubDir()}/sessions.db`;
+}

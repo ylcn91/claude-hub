@@ -30,7 +30,7 @@ const EMPTY_STATS: AgentStats = {
 export class OpenCodeProvider implements AgentProvider {
   id = "opencode";
   displayName = "OpenCode";
-  icon = "⌨";
+  icon = "🔓";
   supportsEntire = false;
 
   async detectRunning(account: Account): Promise<ProcessInfo | null> {

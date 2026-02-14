@@ -57,7 +57,7 @@ function makeRollingWindowPolicy(
 export class ClaudeCodeProvider implements AgentProvider {
   id = "claude-code";
   displayName = "Claude Code";
-  icon = "🟣";
+  icon = "✦";
   supportsEntire = true;
 
   async detectRunning(account: Account): Promise<ProcessInfo | null> {
