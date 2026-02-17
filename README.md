@@ -1,26 +1,29 @@
-```
- █████╗   ██╗
-██╔══██╗ ███║
-╚█████╔╝ ╚██║
- ╚═══██║  ██║
- █████╔╝  ██║
- ╚════╝   ╚═╝
-```
+<p align="center">
+  <img src="docs/assets/splash2.png" alt="agentctl splash screen" width="800">
+</p>
 
-# agentctl
+<h3 align="center">Multi-account AI agent manager</h3>
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Runtime: Bun](https://img.shields.io/badge/Runtime-Bun-f9f1e1.svg)](https://bun.sh)
-[![Platform: macOS | Linux](https://img.shields.io/badge/Platform-macOS%20%7C%20Linux-lightgrey.svg)]()
+<p align="center">
+  <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License: MIT"></a>
+  <a href="https://bun.sh"><img src="https://img.shields.io/badge/Runtime-Bun-f9f1e1.svg" alt="Runtime: Bun"></a>
+  <img src="https://img.shields.io/badge/Platform-macOS%20%7C%20Linux-lightgrey.svg" alt="Platform: macOS | Linux">
+</p>
 
-**Multi-account AI agent manager** — run multiple Claude Code, Codex CLI, OpenHands, Gemini CLI, OpenCode, and Cursor Agent accounts from a single TUI dashboard with inter-agent messaging, task handoff, and MCP tooling.
+<p align="center">
+  Run multiple Claude Code, Codex CLI, OpenHands, Gemini CLI, OpenCode, and Cursor Agent accounts from a single TUI dashboard with inter-agent messaging, task handoff, and MCP tooling.
+</p>
 
-```
-actl                          # launch TUI dashboard
-actl add work                 # add a new account
-actl launch work ~/project    # open in a new terminal
-actl daemon start             # enable inter-agent communication
-```
+<p align="center">
+  <a href="https://ylcn91.github.io/agentctl">Website</a> &middot;
+  <a href="#quick-start">Quick Start</a> &middot;
+  <a href="#cli-reference">CLI Reference</a> &middot;
+  <a href="docs/guides/ARCHITECTURE_GUIDE.md">Architecture</a>
+</p>
+
+<p align="center">
+  <img src="docs/assets/splash1.png" alt="agentctl chat session" width="800">
+</p>
 
 ---
 
